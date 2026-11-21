@@ -10,7 +10,7 @@ import { createLocalGateway } from './chat/local';
 import { createNexconnGateway } from './chat/nexconn';
 import { config } from './config';
 import { migrate } from './db';
-import { cleanupExpired, ensurePool } from './demo';
+import { cleanupExpired, ensurePool, purgeMismatchedPool } from './demo';
 import { log } from './log';
 import { startDispatcher } from './outbox';
 
@@ -54,7 +54,11 @@ async function main() {
   await initGateway();
   startDispatcher();
   const app = buildApp();
-  serve({ fetch: app.fetch, port: config.port }, info => log.info('server.listening', { port: info.port, chatMode: config.chatMode, area: config.nexconn.area }));
+  serve({ fetch: app.fetch, port: config.port }, info => log.info('server.listening', {
+    port: info.port, chatMode: config.chatMode, area: config.nexconn.area, apiDomains: config.nexconn.domains,
+    appKeySet: !!config.nexconn.appKey, appSecretSet: !!config.nexconn.appSecret, publicUrl: config.publicUrl || null,
+  }));
+  await purgeMismatchedPool();
   void ensurePool();
   setInterval(() => void ensurePool(), 30_000).unref();
   setInterval(() => void cleanupExpired().catch(e => log.error('cleanup', { error: String(e) })), 3600_000).unref();

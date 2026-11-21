@@ -24,6 +24,7 @@ create table if not exists users (
   role text not null, name text not null, firm text not null, initials text not null,
   can_hold boolean not null default false, token text, first_connected_at timestamptz,
   created_at timestamptz not null default now());
+alter table projects add column if not exists chat_mode text not null default 'local';
 create index if not exists users_project on users(project_id);
 create table if not exists pins (
   id text primary key, project_id text not null references projects(id) on delete cascade, number int not null,

@@ -35,8 +35,8 @@ export async function seedDemoProject(): Promise<string> {
   const g = gateway();
   const uid = (r: Role) => demoUserIdFor(projectId, r);
   await sql.begin(async t => {
-    await t`insert into projects (id, kind, name, community_id, sheet_number, sheet_title, revision)
-      values (${projectId}, 'demo', 'Meridian Tower', ${communityId}, ${MERIDIAN.sheet.number}, ${MERIDIAN.sheet.title}, ${MERIDIAN.sheet.revision})`;
+    await t`insert into projects (id, kind, name, community_id, sheet_number, sheet_title, revision, chat_mode)
+      values (${projectId}, 'demo', 'Meridian Tower', ${communityId}, ${MERIDIAN.sheet.number}, ${MERIDIAN.sheet.title}, ${MERIDIAN.sheet.revision}, ${config.chatMode})`;
     for (const [role, p] of Object.entries(PEOPLE)) {
       await t`insert into users (id, project_id, role, name, firm, initials, can_hold) values (${uid(role as Role)}, ${projectId}, ${role}, ${p.name}, ${p.firm}, ${p.initials}, ${p.canHold})`;
     }
@@ -113,7 +113,7 @@ export async function ensurePool() {
   filling = true;
   try {
     for (;;) {
-      const [{ n }] = await sql<{ n: number }[]>`select count(*)::int as n from projects where kind = 'demo' and ready and claimed_at is null`;
+      const [{ n }] = await sql<{ n: number }[]>`select count(*)::int as n from projects where kind = 'demo' and ready and claimed_at is null and chat_mode = ${config.chatMode}`;
       if (n >= config.poolSize) break;
       await seedDemoProject();
     }
@@ -128,7 +128,8 @@ export async function claimDemoProject(): Promise<string> {
   const [{ n }] = await sql<{ n: number }[]>`select count(*)::int as n from projects where kind = 'demo' and claimed_at > now() - interval '1 day'`;
   if (n >= config.maxDemoClaimsPerDay) throw new HttpError(503, 'capacity', 'The demo is at capacity for today. Please try again tomorrow.');
   const claim = () => sql<{ id: string }[]>`update projects set claimed_at = now(), expires_at = now() + make_interval(hours => ${config.demoTtlHours})
-    where id = (select id from projects where kind = 'demo' and ready and claimed_at is null order by created_at limit 1 for update skip locked) returning id`;
+    where id = (select id from projects where kind = 'demo' and ready and claimed_at is null and chat_mode = ${config.chatMode}
+      order by created_at limit 1 for update skip locked) returning id`;
   let [row] = await claim();
   if (!row) {
     await seedDemoProject();
@@ -137,6 +138,13 @@ export async function claimDemoProject(): Promise<string> {
   if (!row) throw new HttpError(503, 'busy', 'Setting up demo projects. Try again in a few seconds.');
   setImmediate(() => void ensurePool());
   return row.id;
+}
+
+/** Pre-built projects from another chat mode (e.g. local before Nexconn keys were set) must never be handed out. */
+export async function purgeMismatchedPool() {
+  const rows = await sql<{ id: string }[]>`delete from projects where kind = 'demo' and claimed_at is null and chat_mode <> ${config.chatMode} returning id`;
+  for (const r of rows) await sql`delete from outbox where project_id = ${r.id}`;
+  if (rows.length) log.info('demo.pool.purged', { removed: rows.length, chatMode: config.chatMode });
 }
 
 export async function cleanupExpired() {
