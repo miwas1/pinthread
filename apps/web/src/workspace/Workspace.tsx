@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useLocation, useSearch } from 'wouter';
+import { Link, useLocation, useSearch } from 'wouter';
 import { ROLES, ROLE_INFO, personalLabel, type PinSummary, type Point, type ProjectState, type Role, type SessionResponse } from '@pinthread/shared';
 import { useChat } from '../chat/ChatContext';
 import { Avatar, Spinner, StatusChip, useToast, STATUS_LABEL } from '../components/ui';
 import { SheetCanvas, ZoomStack, type CanvasHandle, type Layers } from '../drawing/SheetCanvas';
+import { SheetProvider } from '../drawing/sheet';
+import { useLogout } from '../lib/account';
 import { ApiError, api, setSession } from '../lib/api';
 import { ago } from '../lib/format';
 import { Icon, Logo } from '../lib/icons';
 import { markOwnDecision, ownDecisionRecently, useIsMobile, useLiveSync, usePinRecord, useProjectState, useThread } from './data';
 import { EvidenceModal, InviteModal, KickedModal, ProposalModal, RaiseIssueModal, TextPromptModal } from './Modals';
 import { Room, type RoomModal } from './Room';
+import { AddSheetModal, GettingStarted, RevisionModal, SheetMenu, TeamModal } from './Team';
 
 
 type Filter = 'all' | 'review' | 'blocked' | 'complete' | 'open';
@@ -28,12 +31,12 @@ function ConnChip({ compact }: { compact?: boolean }) {
   return <span className={`conn ${cls}`} title={label} data-status={status}>{compact ? (status === 'connected' ? 'Live' : status === 'offline' ? 'Offline' : '…') : label}</span>;
 }
 
-function Rail({ state, selectedId, onSelect, filter, setFilter, unread }: { state: ProjectState; selectedId: string | null; onSelect: (id: string) => void; filter: Filter; setFilter: (f: Filter) => void; unread: Record<string, number> }) {
+function Rail({ state, pins, selectedId, onSelect, filter, setFilter, unread, onNewIssue }: { state: ProjectState; pins: PinSummary[]; selectedId: string | null; onSelect: (id: string) => void; filter: Filter; setFilter: (f: Filter) => void; unread: Record<string, number>; onNewIssue: () => void }) {
   const [disc, setDisc] = useState('all');
   const me = state.me.userId;
   const counts = { review: 0, blocked: 0, complete: 0, open: 0 } as Record<string, number>;
-  state.pins.forEach(p => { counts[p.state.status]++; });
-  const shown = state.pins.filter(p => (filter === 'all' || p.state.status === filter) && (disc === 'all' || p.discipline === disc));
+  pins.forEach(p => { counts[p.state.status]++; });
+  const shown = pins.filter(p => (filter === 'all' || p.state.status === filter) && (disc === 'all' || p.discipline === disc));
   const mine = shown.filter(p => p.state.waitingFor.some(w => w.userId === me) && p.state.status !== 'complete');
   const others = shown.filter(p => !mine.includes(p)).sort((a, b) => {
     const rank = (x: PinSummary) => (x.state.status === 'complete' ? 1 : 0);
@@ -53,11 +56,11 @@ function Rail({ state, selectedId, onSelect, filter, setFilter, unread }: { stat
   return (
     <>
       <div className="ph rail-head">
-        <div className="row"><h2 className="h-title" style={{ fontSize: 16 }}>Issues</h2><span className="ref">{state.pins.length}</span></div>
+        <div className="row"><h2 className="h-title" style={{ fontSize: 16 }}>Issues</h2><span className="ref">{pins.length}</span></div>
         <div className="chips" style={{ marginTop: 10 }}>
           {(['all', 'review', 'blocked', 'complete', 'open'] as Filter[]).filter(f => f === 'all' || counts[f]).map(f => (
             <button key={f} className={`fchip ${filter === f ? 'on' : ''}`} onClick={() => setFilter(f)}>
-              {f !== 'all' && <span className={`dot ${f}`} />}{f === 'all' ? 'All' : f === 'complete' ? 'Done' : STATUS_LABEL[f]} <span className="n">{f === 'all' ? state.pins.length : counts[f]}</span>
+              {f !== 'all' && <span className={`dot ${f}`} />}{f === 'all' ? 'All' : f === 'complete' ? 'Done' : STATUS_LABEL[f]} <span className="n">{f === 'all' ? pins.length : counts[f]}</span>
             </button>
           ))}
         </div>
@@ -72,7 +75,15 @@ function Rail({ state, selectedId, onSelect, filter, setFilter, unread }: { stat
       <div className="scroll grow">
         {mine.length > 0 && <><div className="sec-h"><span className="h-sec">Waiting on you</span></div>{mine.map(p => <Item key={p.id} p={p} />)}</>}
         {others.length > 0 && <><div className="sec-h"><span className="h-sec">{mine.length ? 'Everything else' : 'Waiting on others'}</span><span className="grow" /><span className="faint small">Longest wait first</span></div>{others.map(p => <Item key={p.id} p={p} />)}</>}
-        {!shown.length && <div className="empty">Nothing matches these filters. <button className="linkbtn" onClick={() => { setFilter('all'); setDisc('all'); }}>Clear filters</button></div>}
+        {!shown.length && pins.length > 0 && <div className="empty">Nothing matches these filters. <button className="linkbtn" onClick={() => { setFilter('all'); setDisc('all'); }}>Clear filters</button></div>}
+        {!pins.length && (
+          <div className="empty rail-empty">
+            <span className="empty-ico sm"><Icon name="pin" /></span>
+            <b>No issues on this sheet yet</b>
+            <span>Click <b>New issue</b>, then click the spot on the drawing where the question is.</span>
+            <button className="btn btn-outline sm" onClick={onNewIssue}><Icon name="plus" size="sm" />New issue</button>
+          </div>
+        )}
       </div>
     </>
   );
@@ -133,14 +144,23 @@ export function Workspace({ session }: { session: SessionResponse }) {
   const isMobile = useIsMobile();
   const canvas = useRef<CanvasHandle>(null);
   const { data: state, error, isLoading } = useProjectState(projectId);
-  const selectedId = new URLSearchParams(search).get('pin');
+  const params = new URLSearchParams(search);
+  const selectedId = params.get('pin');
   const selected = state?.pins.find(p => p.id === selectedId) ?? null;
+  // The sheet on screen: the selected pin's sheet, else the one in the URL, else the first.
+  const sheets = state?.project.sheets ?? [];
+  const sheet = sheets.find(s => s.id === selected?.sheetId) ?? sheets.find(s => s.id === params.get('sheet')) ?? sheets[0] ?? null;
+  const sheetPins = useMemo(() => (state && sheet ? state.pins.filter(p => p.sheetId === sheet.id) : []), [state, sheet]);
+  const isTeam = (state?.project.kind ?? session.kind ?? 'demo') === 'team';
+  const logout = useLogout();
   const { data: record } = usePinRecord(selected?.id ?? null);
   const [layers, setLayers] = useState<Layers>({ arch: true, struct: true, mep: true });
   const [filter, setFilter] = useState<Filter>('all');
   const [placing, setPlacing] = useState(false);
   const [draft, setDraft] = useState<Point | null>(null);
-  const [modal, setModal] = useState<RoomModal | { kind: 'invite' } | { kind: 'raise'; point: Point } | null>(null);
+  const [modal, setModal] = useState<RoomModal | { kind: 'invite' } | { kind: 'raise'; point: Point } | { kind: 'team'; tab?: 'people' | 'settings' } | { kind: 'addSheet' } | { kind: 'revision' } | null>(null);
+  const guideKey = `pt.guide.${projectId}`;
+  const [guideOpen, setGuideOpen] = useState(() => { try { return localStorage.getItem(guideKey) !== 'off'; } catch { return true; } });
   const [menu, setMenu] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
   const [snap, setSnap] = useState<'peek' | 'half' | 'full'>('half');
@@ -148,12 +168,15 @@ export function Workspace({ session }: { session: SessionResponse }) {
   const [unread, setUnread] = useState<Record<string, number>>({});
   const [trackerOpen, setTrackerOpen] = useState(() => { try { return sessionStorage.getItem('pt.tracker') !== 'off'; } catch { return true; } });
   const [exporting, setExporting] = useState(false);
-  const thread = useThread(selected, state?.project.communityId, !!selected && !!state && selected.memberIds.includes(state.me.userId));
+  const thread = useThread(selected, selected?.communityId, !!selected && !!state && selected.memberIds.includes(state.me.userId));
 
   // Focus requests wait until the pin exists in the loaded state (e.g. a pin that was just raised).
   const pendingFocus = useRef<string | null>(selectedId);
+  const sheetIdRef = useRef<string | null>(null);
+  sheetIdRef.current = sheet?.id ?? null;
   const select = useCallback((id: string | null, focus = true) => {
-    navigate(id ? `/p/${projectId}?pin=${id}` : `/p/${projectId}`, { replace: true });
+    const keep = sheetIdRef.current ? `?sheet=${sheetIdRef.current}` : '';
+    navigate(id ? `/p/${projectId}?pin=${id}` : `/p/${projectId}${keep}`, { replace: true });
     if (id) { setUnread(u => ({ ...u, [id]: 0 })); if (isMobile) setSnap('half'); if (focus) pendingFocus.current = id; }
   }, [navigate, projectId, isMobile]);
 
@@ -193,12 +216,18 @@ export function Workspace({ session }: { session: SessionResponse }) {
     return cur?.route ? [{ route: cur.route }] : [];
   }, [record, selected?.id]);
 
+  const projectName = state?.project.name;
+  useEffect(() => { if (projectName) document.title = `${projectName} · PinThread`; }, [projectName]);
+
+  const pickSheet = (id: string) => { setPlacing(false); navigate(`/p/${projectId}?sheet=${id}`, { replace: true }); };
+
   const exportRegister = async () => {
     setExporting(true);
     try {
       const blob = await api.register(projectId);
       const url = URL.createObjectURL(blob);
-      const a = Object.assign(document.createElement('a'), { href: url, download: `RFI-register-C-103-RevB.pdf` });
+      const fileName = state?.project.kind === 'demo' ? 'RFI-register-C-103-RevB.pdf' : `RFI-register-${(state?.project.name ?? 'project').replace(/[^A-Za-z0-9]+/g, '-')}.pdf`;
+      const a = Object.assign(document.createElement('a'), { href: url, download: fileName });
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 10_000);
       toast({ tone: 'ok', text: <><b>Register exported.</b> Drawing, thread and PDF share one record.</> });
@@ -211,14 +240,15 @@ export function Workspace({ session }: { session: SessionResponse }) {
     try { setSession(await api.switchRole(role)); window.location.reload(); }
     catch (e) { toast({ tone: 'warn', text: e instanceof Error ? e.message : 'Could not switch role' }); }
   };
-  const leave = () => { setSession(null); window.location.href = '/'; };
+  const leave = () => { setSession(null); window.location.href = isTeam ? '/app' : '/demo'; };
 
-  if (isLoading || !state) {
+  if (isLoading || !state || !sheet) {
     if (error) {
-      const expired = error instanceof ApiError && (error.status === 401 || error.status === 404 || error.status === 403);
-      return <div className="center-page"><div className="card pad"><h2 className="h-title">{expired ? 'This demo project has ended' : 'Could not load the project'}</h2><p className="muted">{error.message}</p><button className="btn btn-ink lg" onClick={leave}>Start a new demo</button></div></div>;
+      const gone = error instanceof ApiError && (error.status === 401 || error.status === 404 || error.status === 403);
+      return <div className="center-page"><div className="card pad"><h2 className="h-title">{gone ? (isTeam ? "You can't open this project" : 'This demo project has ended') : 'Could not load the project'}</h2><p className="muted">{error.message}</p><button className="btn btn-ink lg" onClick={leave}>{isTeam ? 'Back to your projects' : 'Start a new demo'}</button></div></div>;
     }
-    return <div className="center-page"><Spinner /> <span className="muted">Loading Meridian Tower…</span></div>;
+    if (state && !sheet) return <div className="center-page"><div className="card pad"><h2 className="h-title">This project has no sheets</h2><p className="muted">Add a drawing to start pinning questions.</p><button className="btn btn-ink lg" onClick={() => setModal({ kind: 'addSheet' })}>Add a sheet</button>{modal?.kind === 'addSheet' && <AddSheetModal projectId={projectId} onClose={() => setModal(null)} onAdded={id => { setModal(null); pickSheet(id); }} />}</div></div>;
+    return <div className="center-page"><Spinner /> <span className="muted">Loading project…</span></div>;
   }
 
   const me = state.me;
@@ -227,6 +257,11 @@ export function Workspace({ session }: { session: SessionResponse }) {
     onClose: () => select(null, false), openModal: (m: RoomModal) => setModal(m), onRegister: exportRegister,
   } : null;
   const roleTitle = ROLE_INFO[me.role].title;
+
+  const canEditSheets = isTeam && (state.me.isAdmin || state.me.role === 'site');
+  const openInvite = () => setModal(isTeam ? { kind: 'team' } : { kind: 'invite' });
+  const startPlacing = () => { select(null, false); setPlacing(true); };
+  const closeGuide = () => { setGuideOpen(false); try { localStorage.setItem(guideKey, 'off'); } catch { /* ignore */ } };
 
   const handleStep = (n: number) => {
     const hero = state.pins.find(p => p.number === 'RFI-001');
@@ -239,9 +274,12 @@ export function Workspace({ session }: { session: SessionResponse }) {
   const modals = (
     <>
       {modal?.kind === 'invite' && <InviteModal session={session} state={state} onClose={() => setModal(null)} />}
-      {modal?.kind === 'raise' && <RaiseIssueModal point={modal.point} state={state} onClose={() => { setModal(null); setDraft(null); }}
+      {modal?.kind === 'team' && <TeamModal state={state} initialTab={modal.tab} onClose={() => setModal(null)} />}
+      {modal?.kind === 'addSheet' && <AddSheetModal projectId={projectId} onClose={() => setModal(null)} onAdded={id => { setModal(null); pickSheet(id); toast({ tone: 'ok', text: 'Sheet added.' }); }} />}
+      {modal?.kind === 'revision' && <RevisionModal state={state} sheet={sheet} onClose={() => setModal(null)} />}
+      {modal?.kind === 'raise' && <RaiseIssueModal point={modal.point} sheet={sheet} state={state} onInvite={isTeam ? () => setModal({ kind: 'team' }) : undefined} onClose={() => { setModal(null); setDraft(null); }}
         onCreated={r => { setModal(null); setDraft(null); qc.setQueryData(['pin', r.id], r); void qc.invalidateQueries({ queryKey: ['state', projectId] }).then(() => select(r.id)); toast({ tone: 'ok', text: <><b>{r.number}</b> raised. Reviewers have been alerted.</> }); }} />}
-      {record && modal?.kind === 'proposal' && <ProposalModal record={record} me={me} revise={modal.revise} onClose={() => setModal(null)}
+      {record && modal?.kind === 'proposal' && <ProposalModal record={record} sheet={sheet} me={me} revise={modal.revise} onClose={() => setModal(null)}
         onPosted={r => { markOwnDecision(); setModal(null); qc.setQueryData(['pin', r.id], r); void qc.invalidateQueries({ queryKey: ['state', projectId] }); toast({ tone: 'ok', text: <><b>Proposal v{r.proposals.at(-1)?.version} posted.</b> {r.state.waitingFor.length ? `Waiting for ${r.state.waitingFor.map(w => ROLE_INFO[w.role].label).join(' and ')}.` : ''}</> }); }} />}
       {record && modal?.kind === 'hold' && <TextPromptModal title={`Place a hold on ${record.number}`} sub="The pin turns red for everyone until you clear it." label="What prevents approval?" placeholder="e.g. Visible honeycombing at the slab edge" cta="Place hold" danger
         second={{ label: 'What would clear it?', placeholder: 'e.g. Core test results or a repair method statement' }} onClose={() => setModal(null)}
@@ -249,7 +287,7 @@ export function Workspace({ session }: { session: SessionResponse }) {
       {record && modal?.kind === 'clear' && <TextPromptModal title={`Clear the hold on ${record.number}`} sub={`To clear: ${modal.hold.clearCondition}`} label="Note for the record" placeholder="e.g. Core results acceptable (42 MPa). Proceed with MS-07." cta="Clear hold" minLength={0}
         onClose={() => setModal(null)} onSubmit={async note => { const r = await api.clearHold(record.id, modal.hold.id, note || null); markOwnDecision(); qc.setQueryData(['pin', r.id], r); void qc.invalidateQueries({ queryKey: ['state', projectId] }); setModal(null); }} />}
       {record && modal?.kind === 'change' && <TextPromptModal title="Request a change" sub={`${record.number} · Proposal v${record.proposals.find(p => p.current)?.version}`} label="What needs to change?" placeholder="e.g. Keep 300 mm clear of the column flange" cta="Request change"
-        onClose={() => setModal(null)} onSubmit={async comment => { const cur = record.proposals.find(p => p.current)!; const r = await api.signoff(record.id, crypto.randomUUID(), { proposalId: cur.id, revision: state.project.sheet.revision, verdict: 'request_change', comment }); qc.setQueryData(['pin', record.id], r.record); void qc.invalidateQueries({ queryKey: ['state', projectId] }); setModal(null); }} />}
+        onClose={() => setModal(null)} onSubmit={async comment => { const cur = record.proposals.find(p => p.current)!; const r = await api.signoff(record.id, crypto.randomUUID(), { proposalId: cur.id, revision: sheet.revision, verdict: 'request_change', comment }); qc.setQueryData(['pin', record.id], r.record); void qc.invalidateQueries({ queryKey: ['state', projectId] }); setModal(null); }} />}
       {record && modal?.kind === 'evidence' && <EvidenceModal hold={modal.hold} pinNumber={record.number} onClose={() => setModal(null)}
         upload={async f => { const m = await thread.sendImage(f); return { imageUrl: m.imageUrl, id: m.id }; }}
         onDone={async (url, caption, messageId) => { const r = await api.evidence(record.id, { holdId: modal.hold.id, imageUrl: url, caption, messageId }); qc.setQueryData(['pin', r.id], r); void qc.invalidateQueries({ queryKey: ['state', projectId] }); setModal(null); toast({ tone: 'ok', text: <><b>Evidence posted.</b> {modal.hold.placedBy.name} has been alerted.</> }); }} />}
@@ -258,33 +296,46 @@ export function Workspace({ session }: { session: SessionResponse }) {
   );
 
   const canvasEl = (
-    <section className="canvas" aria-label="Drawing C-103 Level 03 Rev B">
-      <SheetCanvas ref={canvas} pins={state.pins} selectedId={selectedId} labelFor={p => personalLabel(p.state, me.userId)} onSelect={id => select(id)}
+    <section className="canvas" aria-label={`Drawing ${sheet.number} ${sheet.title} Rev ${sheet.revision}`}>
+      <SheetCanvas ref={canvas} pins={sheetPins} selectedId={selectedId} labelFor={p => personalLabel(p.state, me.userId)} onSelect={id => select(id)}
         routes={routes} layers={layers} placing={placing} onPlace={pt => { setPlacing(false); setDraft(pt); setModal({ kind: 'raise', point: pt }); }}
         bottomInset={isMobile ? (selected ? Math.min(580, Math.round(window.innerHeight * 0.66)) : 148) : 0} unread={unread} pulseId={pulseId} draft={draft} compactLabels={isMobile} />
-      <div className="float tl"><div className="seg" role="group" aria-label="Drawing layers">
+      {sheet.source === 'vector' && <div className="float tl"><div className="seg" role="group" aria-label="Drawing layers">
         {(['arch', 'struct', 'mep'] as const).map(k => <button key={k} className={layers[k] ? 'on' : ''} aria-pressed={layers[k]} onClick={() => setLayers(l => ({ ...l, [k]: !l[k] }))}><span className="sw" style={{ background: `var(--layer-${k})` }} />{k === 'arch' ? 'Arch' : k === 'struct' ? 'Struct' : 'MEP'}</button>)}
-      </div></div>
+      </div></div>}
       {state.demo && trackerOpen && !isMobile && <div className="float tr"><Tracker state={state} onStep={handleStep} onClose={() => { setTrackerOpen(false); try { sessionStorage.setItem('pt.tracker', 'off'); } catch { /* ignore */ } }} /></div>}
+      {isTeam && state.me.isAdmin && guideOpen && !isMobile && !selected && <div className="float tr"><GettingStarted state={state} onInvite={openInvite} onNewIssue={startPlacing} onAddSheet={() => setModal({ kind: 'addSheet' })} onClose={closeGuide} /></div>}
       {!isMobile && <div className="float br"><ZoomStack canvas={canvas} selectedId={selectedId} /></div>}
       <div className={`float ${isMobile ? 'tr' : 'bl'}`}>
         {placing
           ? <div className="placing-hint"><Icon name="pin" size="sm" />Tap where the issue is <button className="btn btn-outline sm" onClick={() => setPlacing(false)}>Cancel</button></div>
-          : <button className={`fab ${isMobile ? 'icon' : ''}`} onClick={() => setPlacing(true)} aria-label="New issue"><Icon name="plus" />{!isMobile && 'New issue'}</button>}
+          : <button className={`fab ${isMobile ? 'icon' : ''}`} onClick={startPlacing} aria-label="New issue"><Icon name="plus" />{!isMobile && 'New issue'}</button>}
       </div>
-      {!isMobile && <div className="float bc"><span className="readout">{state.project.sheet.number} · Rev {state.project.sheet.revision}</span></div>}
+      {!isMobile && <div className="float bc"><span className="readout">{sheet.number} · Rev {sheet.revision}</span></div>}
     </section>
   );
 
   const menuEl = menu && (
     <div className="menu" role="menu" onMouseLeave={() => setMenu(false)}>
-      <div className="menu-h"><Avatar p={me} /><div><b>{me.name}</b><div className="faint small">{roleTitle} · {me.firm}</div></div></div>
-      <div className="menu-sec">Act as someone else</div>
-      {ROLES.filter(r => r !== me.role).map(r => { const m = state.members.find(x => x.role === r); return <button key={r} role="menuitem" onClick={() => switchRole(r)}><Avatar p={m} size="sm" />{m?.name}<span className="faint small">{ROLE_INFO[r].label}</span></button>; })}
+      <div className="menu-h"><Avatar p={me} /><div><b>{me.name}</b><div className="faint small">{roleTitle}{me.firm ? ` · ${me.firm}` : ''}{state.me.isAdmin ? ' · Admin' : ''}</div></div></div>
+      {!isTeam && <>
+        <div className="menu-sec">Act as someone else</div>
+        {ROLES.filter(r => r !== me.role).map(r => { const m = state.members.find(x => x.role === r); return <button key={r} role="menuitem" onClick={() => switchRole(r)}><Avatar p={m} size="sm" />{m?.name}<span className="faint small">{ROLE_INFO[r].label}</span></button>; })}
+      </>}
+      {isTeam && <>
+        <div className="menu-sep" />
+        <Link href="/app" className="menu-a" role="menuitem"><Icon name="layers" size="sm" />All projects</Link>
+        <button role="menuitem" onClick={() => { setModal({ kind: 'team' }); setMenu(false); }}><Icon name="users" size="sm" />Team</button>
+        <button role="menuitem" onClick={() => { setModal({ kind: 'team', tab: 'settings' }); setMenu(false); }}><Icon name="info" size="sm" />Project settings</button>
+        {isMobile && <button role="menuitem" onClick={() => { void exportRegister(); setMenu(false); }}><Icon name="download" size="sm" />Export register</button>}
+      </>}
       <div className="menu-sep" />
       <button role="menuitem" onClick={() => { setActivityOpen(o => !o); setMenu(false); }}><Icon name="activity" size="sm" />{activityOpen ? 'Hide' : 'Show'} Nexconn activity</button>
       {state.demo && !trackerOpen && <button role="menuitem" onClick={() => { setTrackerOpen(true); setMenu(false); try { sessionStorage.removeItem('pt.tracker'); } catch { /* ignore */ } }}><Icon name="list" size="sm" />Show demo guide</button>}
-      <button role="menuitem" onClick={leave}><Icon name="logout" size="sm" />Leave demo</button>
+      {isTeam && !guideOpen && state.me.isAdmin && <button role="menuitem" onClick={() => { setGuideOpen(true); setMenu(false); try { localStorage.removeItem(guideKey); } catch { /* ignore */ } }}><Icon name="list" size="sm" />Show getting started</button>}
+      {isTeam
+        ? <><Link href="/app/account" className="menu-a" role="menuitem"><Icon name="users" size="sm" />Account settings</Link><button role="menuitem" onClick={() => void logout()}><Icon name="logout" size="sm" />Log out</button></>
+        : <><Link href="/signup" className="menu-a" role="menuitem"><Icon name="plus" size="sm" />Create your own project</Link><button role="menuitem" onClick={leave}><Icon name="logout" size="sm" />Leave demo</button></>}
     </div>
   );
 
@@ -297,47 +348,60 @@ export function Workspace({ session }: { session: SessionResponse }) {
 
   if (isMobile) {
     return (
+      <SheetProvider sheet={sheet}>
       <div className="app mobile">
         <header className="mtop">
-          <Logo size={26} /><span className="revpill">C-103 · Rev B</span><span className="grow" /><ConnChip compact />
-          {state.demo && <button className="tool sm" aria-label="Invite another device" onClick={() => setModal({ kind: 'invite' })}><Icon name="qr" size="sm" /></button>}
+          <a href={isTeam ? '/app' : '/'} aria-label="PinThread home"><Logo size={26} /></a>
+          <SheetMenu state={state} current={sheet} onPick={pickSheet} onAdd={() => setModal({ kind: 'addSheet' })} onRevise={() => setModal({ kind: 'revision' })} canEdit={canEditSheets} />
+          <span className="grow" /><ConnChip compact />
+          <button className="tool sm" aria-label={isTeam ? 'Team' : 'Invite another device'} onClick={openInvite}><Icon name={isTeam ? 'users' : 'qr'} size="sm" /></button>
           <button className="avbtn" onClick={() => setMenu(m => !m)} aria-label="Account menu"><Avatar p={me} /></button>
           {menuEl}
         </header>
         <main className="mcanvas">{canvasEl}</main>
         <BottomSheet snap={selected ? snap : snap === 'full' ? 'full' : snap === 'half' ? 'half' : 'peek'} setSnap={setSnap}>
           {roomProps ? <Room {...roomProps} compact /> : (
-            <div className="rail mrail"><Rail state={state} selectedId={selectedId} onSelect={id => select(id)} filter={filter} setFilter={setFilter} unread={unread} /></div>
+            <div className="rail mrail"><Rail state={state} pins={sheetPins} selectedId={selectedId} onSelect={id => select(id)} filter={filter} setFilter={setFilter} unread={unread} onNewIssue={startPlacing} /></div>
           )}
           {selected && <button className="sheet-back" onClick={() => select(null, false)}><Icon name="list" size="sm" />All issues</button>}
         </BottomSheet>
         {activity}
         {modals}
       </div>
+      </SheetProvider>
     );
   }
 
   return (
+    <SheetProvider sheet={sheet}>
     <div className={`app ${selected ? 'with-room' : ''}`}>
       <header className="topbar">
-        <a className="logo" href="/" onClick={e => { e.preventDefault(); select(null, false); canvas.current?.fit(); }}><Logo />PinThread</a>
-        <nav className="crumb"><span>{state.project.name}</span><span className="sep">/</span><b>{state.project.sheet.number} {state.project.sheet.title}</b><span className="revpill">Rev {state.project.sheet.revision}</span></nav>
+        <a className="logo" href={isTeam ? '/app' : '/'} title={isTeam ? 'All projects' : 'PinThread'}><Logo />PinThread</a>
+        <nav className="crumb">
+          {isTeam ? <Link href="/app" className="crumb-link">{state.project.name}</Link> : <span>{state.project.name}</span>}
+          {!isTeam && <span className="tag demo-tag">Demo</span>}
+          <span className="sep">/</span>
+          <SheetMenu state={state} current={sheet} onPick={pickSheet} onAdd={() => setModal({ kind: 'addSheet' })} onRevise={() => setModal({ kind: 'revision' })} canEdit={canEditSheets} />
+        </nav>
         <span className="grow" />
         <ConnChip />
-        {state.demo && <button className="btn btn-outline" onClick={() => setModal({ kind: 'invite' })}><Icon name="qr" size="sm" />Invite device</button>}
+        {state.demo
+          ? <button className="btn btn-outline" onClick={() => setModal({ kind: 'invite' })}><Icon name="qr" size="sm" />Invite device</button>
+          : <button className="btn btn-outline" onClick={() => setModal({ kind: 'team' })}><Icon name="users" size="sm" />Team<span className="count-pill">{state.members.length}</span></button>}
         <button className="btn btn-outline" onClick={exportRegister} disabled={exporting}>{exporting ? <Spinner /> : <Icon name="download" size="sm" />}Export register</button>
         <div className="me" style={{ position: 'relative' }}>
-          <button className="avbtn" onClick={() => setMenu(m => !m)} aria-haspopup="menu" aria-expanded={menu}><Avatar p={me} /><div className="who"><b>{me.name}</b><span>{roleTitle} · {me.firm}</span></div><Icon name="chevdown" size="sm" /></button>
+          <button className="avbtn" onClick={() => setMenu(m => !m)} aria-haspopup="menu" aria-expanded={menu}><Avatar p={me} /><div className="who"><b>{me.name}</b><span>{roleTitle}{me.firm ? ` · ${me.firm}` : ''}</span></div><Icon name="chevdown" size="sm" /></button>
           {menuEl}
         </div>
       </header>
       <div className="main">
-        <aside className="rail"><Rail state={state} selectedId={selectedId} onSelect={id => select(id)} filter={filter} setFilter={setFilter} unread={unread} /></aside>
+        <aside className="rail"><Rail state={state} pins={sheetPins} selectedId={selectedId} onSelect={id => select(id)} filter={filter} setFilter={setFilter} unread={unread} onNewIssue={startPlacing} /></aside>
         {canvasEl}
         {roomProps && <aside className="panel"><Room {...roomProps} /></aside>}
       </div>
       {activity}
       {modals}
     </div>
+    </SheetProvider>
   );
 }

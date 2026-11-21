@@ -1,5 +1,5 @@
 // Read models: turn rows into the shared DTOs (Person, PinSummary, PinRecord) and PinFacts for derivePinState.
-import { derivePinState, rfiNumber, type Hold, type Person, type PinFacts, type PinRecord, type PinState, type PinSummary, type Proposal, type Role, type Signoff, type Evidence } from '@pinthread/shared';
+import { derivePinState, rfiNumber, type Hold, type Person, type PinFacts, type PinRecord, type PinState, type PinSummary, type Proposal, type Role, type Sheet, type Signoff, type Evidence } from '@pinthread/shared';
 import type { Q } from './db';
 import { canonical, HttpError, iso, sha256hex } from './util';
 
@@ -7,10 +7,36 @@ export interface PinRow {
   id: string; project_id: string; number: number; x: number; y: number; grid_ref: string; title: string; question: string;
   discipline: string; severity: string; subchannel_id: string; created_by: string; created_at: Date; status: string;
   status_label: string; state_seq: number; current_proposal_id: string | null; waiting_since: Date | null; room_ready: boolean;
+  sheet_id: string; community_id: string;
 }
 export interface ProjectRow {
-  id: string; kind: 'demo' | 'pilot'; name: string; community_id: string; sheet_number: string; sheet_title: string;
-  revision: string; pin_seq: number; ready: boolean; claimed_at: Date | null; exported_at: Date | null; expires_at: Date | null;
+  id: string; kind: 'demo' | 'team'; name: string; community_id: string;
+  pin_seq: number; ready: boolean; claimed_at: Date | null; exported_at: Date | null; expires_at: Date | null;
+  owner_account_id: string | null; created_at: Date; updated_at: Date;
+}
+export interface SheetRow {
+  id: string; project_id: string; number: string; title: string; revision: string; source: 'vector' | 'image';
+  file_id: string | null; thumb_file_id: string | null; width: number; height: number; ord: number; created_at: Date; updated_at: Date;
+}
+
+export const sheetImageUrl = (s: Pick<SheetRow, 'id' | 'source' | 'file_id'>) => (s.source === 'image' && s.file_id ? `/api/sheets/${s.id}/image?v=${s.file_id}` : null);
+
+export async function getSheet(db: Q, sheetId: string): Promise<SheetRow> {
+  const [s] = await db<SheetRow[]>`select * from sheets where id = ${sheetId}`;
+  if (!s) throw new HttpError(404, 'not_found', 'Sheet not found.');
+  return s;
+}
+
+export async function projectSheets(db: Q, projectId: string): Promise<Sheet[]> {
+  const rows = await db<SheetRow[]>`select * from sheets where project_id = ${projectId} order by ord, created_at`;
+  const revs = rows.length ? await db<{ sheet_id: string; revision: string; created_at: Date; name: string | null }[]>`
+    select r.sheet_id, r.revision, r.created_at, u.name from sheet_revisions r left join users u on u.id = r.created_by
+    where r.sheet_id in ${db(rows.map(r => r.id))} order by r.created_at desc, r.id desc` : [];
+  return rows.map(r => ({
+    id: r.id, number: r.number, title: r.title, revision: r.revision, source: r.source, imageUrl: sheetImageUrl(r),
+    width: r.width, height: r.height,
+    revisions: revs.filter(v => v.sheet_id === r.id).map(v => ({ revision: v.revision, at: iso(v.created_at)!, by: v.name })),
+  }));
 }
 
 export const person = (u: { id: string; name: string; role: string; firm: string; initials: string }): Person =>
@@ -23,13 +49,13 @@ export async function getProject(db: Q, projectId: string): Promise<ProjectRow> 
 }
 
 export async function projectPeople(db: Q, projectId: string) {
-  const users = await db<{ id: string; name: string; role: string; firm: string; initials: string; can_hold: boolean; first_connected_at: Date | null }[]>`
-    select id, name, role, firm, initials, can_hold, first_connected_at from users where project_id = ${projectId} order by created_at, id`;
+  const users = await db<{ id: string; name: string; role: string; firm: string; initials: string; can_hold: boolean; first_connected_at: Date | null; active: boolean; is_admin: boolean; email: string | null; created_at: Date }[]>`
+    select id, name, role, firm, initials, can_hold, first_connected_at, active, is_admin, email, created_at from users where project_id = ${projectId} order by created_at, id`;
   return new Map(users.map(u => [u.id, u]));
 }
 
 interface PinData {
-  pin: PinRow; project: ProjectRow; people: Awaited<ReturnType<typeof projectPeople>>;
+  pin: PinRow; project: ProjectRow; sheet: SheetRow; people: Awaited<ReturnType<typeof projectPeople>>;
   reviewerIds: string[]; proposals: any[]; signoffs: any[]; holds: any[]; evidence: any[];
 }
 
@@ -37,24 +63,25 @@ async function loadPinData(db: Q, pinId: string, lock = false): Promise<PinData>
   const [pin] = lock ? await db<PinRow[]>`select * from pins where id = ${pinId} for update` : await db<PinRow[]>`select * from pins where id = ${pinId}`;
   if (!pin) throw new HttpError(404, 'not_found', 'Issue not found.');
   const project = await getProject(db, pin.project_id);
+  const sheet = await getSheet(db, pin.sheet_id);
   const people = await projectPeople(db, pin.project_id);
   const reviewerIds = (await db<{ user_id: string }[]>`select user_id from pin_reviewers where pin_id = ${pinId} order by ord`).map(r => r.user_id);
   const proposals = await db`select * from proposals where pin_id = ${pinId} order by version`;
   const signoffs = await db`select s.*, p.version from signoffs s join proposals p on p.id = s.proposal_id where s.pin_id = ${pinId} order by s.updated_at`;
   const holds = await db`select * from holds where pin_id = ${pinId} order by created_at`;
   const evidence = await db`select * from evidence where pin_id = ${pinId} order by created_at`;
-  return { pin, project, people, reviewerIds, proposals, signoffs, holds, evidence };
+  return { pin, project, sheet, people, reviewerIds, proposals, signoffs, holds, evidence };
 }
 
 function facts(d: PinData): PinFacts {
   const P = (id: string) => person(d.people.get(id)!);
-  const site = [...d.people.values()].find(u => u.role === 'site');
+  const site = [...d.people.values()].find(u => u.role === 'site' && u.active);
   const cur = d.proposals.find(p => p.id === d.pin.current_proposal_id);
   const hold = d.holds.find(h => h.status === 'active');
   return {
     requiredReviewers: d.reviewerIds.map(P),
     siteLead: site ? person(site) : P(d.pin.created_by),
-    currentRevision: d.project.revision,
+    currentRevision: d.sheet.revision,
     currentProposal: cur ? { id: cur.id, version: cur.version, revision: cur.revision } : null,
     signoffs: d.signoffs.map(s => ({ proposalId: s.proposal_id, reviewerId: s.reviewer_id, revision: s.revision, verdict: s.verdict, at: iso(s.updated_at)! })),
     activeHold: hold ? { placedBy: P(hold.placed_by), reason: hold.reason, clearCondition: hold.clear_condition, evidenceSubmitted: d.evidence.some(e => e.hold_id === hold.id) } : null,
@@ -62,15 +89,15 @@ function facts(d: PinData): PinFacts {
 }
 
 export function pinMemberIds(d: { pin: PinRow; reviewerIds: string[]; people: PinData['people'] }): string[] {
-  const site = [...d.people.values()].filter(u => u.role === 'site').map(u => u.id);
+  const site = [...d.people.values()].filter(u => u.role === 'site' && u.active).map(u => u.id);
   return [...new Set([...site, d.pin.created_by, ...d.reviewerIds])];
 }
 
 function summary(d: PinData, state: PinState): PinSummary {
   const cur = d.proposals.find(p => p.id === d.pin.current_proposal_id);
-  const approvedBy = cur ? d.signoffs.filter(s => s.proposal_id === cur.id && s.verdict === 'approve' && s.revision === d.project.revision).map(s => s.reviewer_id) : [];
+  const approvedBy = cur ? d.signoffs.filter(s => s.proposal_id === cur.id && s.verdict === 'approve' && s.revision === d.sheet.revision).map(s => s.reviewer_id) : [];
   return {
-    id: d.pin.id, number: rfiNumber(d.pin.number), x: d.pin.x, y: d.pin.y, gridRef: d.pin.grid_ref, title: d.pin.title,
+    id: d.pin.id, sheetId: d.pin.sheet_id, communityId: d.pin.community_id, number: rfiNumber(d.pin.number), x: d.pin.x, y: d.pin.y, gridRef: d.pin.grid_ref, title: d.pin.title,
     discipline: d.pin.discipline as PinSummary['discipline'], severity: d.pin.severity as PinSummary['severity'],
     subchannelId: d.pin.subchannel_id, seq: d.pin.state_seq, state,
     reviewers: d.reviewerIds.map(id => person(d.people.get(id)!)), memberIds: pinMemberIds(d), approvedBy,
@@ -98,7 +125,7 @@ function record(d: PinData): PinRecord {
   }));
   const cur = proposals.find(p => p.current);
   const hashInput = {
-    pin: d.pin.id, status: state.status, revision: d.project.revision,
+    pin: d.pin.id, status: state.status, revision: d.sheet.revision,
     proposal: cur ? { id: cur.id, version: cur.version, revision: cur.revision, summary: cur.summary, route: cur.route } : null,
     signoffs: signoffs.filter(s => s.proposalId === cur?.id).map(s => [s.reviewer.userId, s.verdict, s.revision, s.at]).sort(),
     holds: holds.map(h => [h.id, h.status]),

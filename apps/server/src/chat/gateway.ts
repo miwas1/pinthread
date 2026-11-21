@@ -18,6 +18,8 @@ export interface ChatGateway {
   issueToken(userId: string, name: string, avatarUrl?: string): Promise<string>;
   createCommunity(communityId: string, ownerUserId: string, name: string): Promise<void>;
   joinCommunity(communityId: string, userId: string): Promise<void>;
+  /** Remove a person from the project's community (they stop receiving its messages). */
+  leaveCommunity(communityId: string, userId: string): Promise<void>;
   createSubchannel(communityId: string, subchannelId: string, isPrivate: boolean): Promise<void>;
   addPrivateMembers(communityId: string, subchannelId: string, userIds: string[]): Promise<void>;
   send(spec: SendSpec): Promise<{ messageId: string | null }>;

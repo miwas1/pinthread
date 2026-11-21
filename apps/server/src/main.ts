@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { BOT_USER_ID } from '@pinthread/shared';
+import { accountApi } from './account';
 import { api, errorHandler, localChat, uploads } from './api';
 import { setGateway } from './chat/gateway';
 import { createLocalGateway } from './chat/local';
@@ -13,6 +14,7 @@ import { migrate } from './db';
 import { cleanupExpired, ensurePool, purgeMismatchedPool } from './demo';
 import { log } from './log';
 import { startDispatcher } from './outbox';
+import { cleanupOrphanFiles } from './team';
 
 export function buildApp() {
   const app = new Hono();
@@ -25,6 +27,7 @@ export function buildApp() {
   // Public routers first: the authenticated API router guards everything else under /api.
   if (config.chatMode === 'local') app.route('/api/local', localChat);
   app.route('/api/uploads', uploads);
+  app.route('/api', accountApi); // cookie-authenticated account routes; per-route guards, so it never blocks the others
   app.route('/api', api);
   app.all('/api/*', c => c.json({ error: 'not_found', message: 'Unknown API route.' }, 404));
 
@@ -63,6 +66,7 @@ async function main() {
   setTimeout(() => void ensurePool(), config.isProd ? 45_000 : 0).unref();
   setInterval(() => void ensurePool(), 30_000).unref();
   setInterval(() => void cleanupExpired().catch(e => log.error('cleanup', { error: String(e) })), 3600_000).unref();
+  setInterval(() => void cleanupOrphanFiles().catch(e => log.error('cleanup.files', { error: String(e) })), 3600_000).unref();
 }
 
 if (process.env.PINTHREAD_NO_MAIN !== '1') {

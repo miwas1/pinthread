@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { ROLE_INFO, gridRef, type Hold, type Person, type PinRecord, type Point, type ProjectState, type Role, type SessionResponse } from '@pinthread/shared';
+import { ROLE_INFO, gridRef, type Hold, type Person, type PinRecord, type Point, type ProjectState, type Role, type SessionResponse, type Sheet } from '@pinthread/shared';
 import { Avatar, Modal, Spinner, useToast } from '../components/ui';
 import { RedlineEditor } from '../drawing/Crop';
 import { ApiError, api } from '../lib/api';
@@ -11,7 +11,7 @@ function ErrorLine({ e }: { e: string | null }) {
   return e ? <div className="form-error" role="alert"><Icon name="info" size="sm" />{e}</div> : null;
 }
 
-export function ProposalModal({ record, me, revise, onClose, onPosted }: { record: PinRecord; me: Person; revise: boolean; onClose: () => void; onPosted: (r: PinRecord) => void }) {
+export function ProposalModal({ record, sheet, me, revise, onClose, onPosted }: { record: PinRecord; sheet: Sheet; me: Person; revise: boolean; onClose: () => void; onPosted: (r: PinRecord) => void }) {
   const cur = record.proposals.find(p => p.current) ?? null;
   const latest = record.proposals.at(-1);
   const isReviewer = record.reviewers.some(r => r.userId === me.userId);
@@ -38,10 +38,10 @@ export function ProposalModal({ record, me, revise, onClose, onPosted }: { recor
   };
 
   return (
-    <Modal wide title={`${revise ? 'Revise' : 'New'} proposal for ${record.number}`} sub={`${record.title} · Rev B · Grid ${record.gridRef}`}
+    <Modal wide title={`${revise ? 'Revise' : 'New'} proposal for ${record.number}`} sub={`${record.title} · ${sheet.number} Rev ${sheet.revision} · Grid ${record.gridRef}`}
       icon={<span style={{ color: 'var(--redline)' }}><Icon name="route" size="lg" /></span>} onClose={onClose}
       footer={<>
-        <span className="faint small grow">Route drawn on <span className="mono">C-103 Rev B</span>. A later edit creates v{version + 1} and asks everyone to approve again.</span>
+        <span className="faint small grow">Route drawn on <span className="mono">{sheet.number} Rev {sheet.revision}</span>. A later edit creates v{version + 1} and asks everyone to approve again.</span>
         <button className="btn btn-ghost lg" onClick={onClose}>Cancel</button>
         <button className="btn btn-ink lg" onClick={submit} disabled={busy}>{busy ? <><Spinner />Posting…</> : `Post proposal v${version}`}</button>
       </>}>
@@ -62,7 +62,7 @@ export function ProposalModal({ record, me, revise, onClose, onPosted }: { recor
           {isReviewer && (
             <label className="check"><input type="checkbox" checked={approveOwn} onChange={e => setApproveOwn(e.target.checked)} /><span>Approve for <b>{ROLE_INFO[me.role].label}</b> when I post</span></label>
           )}
-          {others.length > 0 && <div className="note"><Icon name="info" size="sm" /><span>{others.map(o => o.name).join(' and ')} {others.length > 1 ? 'get' : 'gets'} a <b>Jump to pin</b> alert and {others.length > 1 ? 'see' : 'sees'} this route on Rev B.</span></div>}
+          {others.length > 0 && <div className="note"><Icon name="info" size="sm" /><span>{others.map(o => o.name).join(' and ')} {others.length > 1 ? 'get' : 'gets'} a <b>Jump to pin</b> alert and {others.length > 1 ? 'see' : 'sees'} this route on Rev {sheet.revision}.</span></div>}
           <ErrorLine e={err} />
         </div>
       </div>
@@ -73,41 +73,47 @@ export function ProposalModal({ record, me, revise, onClose, onPosted }: { recor
 const DISCIPLINES = [['mep', 'MEP'], ['struct', 'Structural'], ['arch', 'Architecture'], ['elec', 'Electrical']] as const;
 const DEFAULT_REVIEWERS: Record<string, Role[]> = { mep: ['mep', 'struct'], struct: ['struct', 'arch'], arch: ['arch', 'struct'], elec: ['mep', 'arch'] };
 
-export function RaiseIssueModal({ point, state, onClose, onCreated }: { point: Point; state: ProjectState; onClose: () => void; onCreated: (r: PinRecord) => void }) {
+export function RaiseIssueModal({ point, sheet, state, onClose, onCreated, onInvite }: { point: Point; sheet: Sheet; state: ProjectState; onClose: () => void; onCreated: (r: PinRecord) => void; onInvite?: () => void }) {
   const [title, setTitle] = useState('');
   const [question, setQuestion] = useState('');
   const [discipline, setDiscipline] = useState<string>('mep');
   const [severity, setSeverity] = useState('medium');
-  const candidates = state.members.filter(m => m.userId !== state.me.userId);
+  const vector = sheet.source === 'vector';
+  const [location, setLocation] = useState('');
+  const team = state.project.kind === 'team';
+  // Team projects can be small: you may be one of the reviewers yourself.
+  const candidates = team ? [...state.members].sort((a, b) => Number(a.userId === state.me.userId) - Number(b.userId === state.me.userId)) : state.members.filter(m => m.userId !== state.me.userId);
   const [reviewers, setReviewers] = useState<string[]>(() => candidates.filter(m => DEFAULT_REVIEWERS.mep.includes(m.role)).map(m => m.userId));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const grid = gridRef(point);
+  const grid = vector ? gridRef(point) : location.trim();
 
   const pickDiscipline = (d: string) => { setDiscipline(d); setReviewers(candidates.filter(m => DEFAULT_REVIEWERS[d].includes(m.role)).map(m => m.userId)); };
   const submit = async () => {
     if (title.trim().length < 3 || question.trim().length < 3) { setErr('Add a short title and the question you need answered.'); return; }
     if (!reviewers.length) { setErr('Choose at least one reviewer.'); return; }
     setBusy(true); setErr(null);
-    try { onCreated(await api.createPin(state.project.id, { x: point[0], y: point[1], title: title.trim(), question: question.trim(), discipline, severity, reviewerIds: reviewers })); }
+    try { onCreated(await api.createPin(state.project.id, { sheetId: sheet.id, gridRef: vector ? null : location.trim() || null, x: point[0], y: point[1], title: title.trim(), question: question.trim(), discipline, severity, reviewerIds: reviewers })); }
     catch (e) { setErr(e instanceof ApiError ? e.message : 'Could not raise the issue.'); setBusy(false); }
   };
 
   return (
-    <Modal title="Raise an issue" sub={`C-103 Rev B · Grid ${grid}`} icon={<Icon name="pin" size="lg" />} onClose={onClose}
+    <Modal title="Raise an issue" sub={`${sheet.number} Rev ${sheet.revision}${grid ? ` · Grid ${grid}` : ''}`} icon={<Icon name="pin" size="lg" />} onClose={onClose}
       footer={<><span className="grow" /><button className="btn btn-ghost lg" onClick={onClose}>Cancel</button><button className="btn btn-ink lg" disabled={busy} onClick={submit}>{busy ? <><Spinner />Raising…</> : 'Raise issue'}</button></>}>
       <div className="form">
         <label className="field-l">Title<input className="field" maxLength={90} value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Sprinkler main clashes with cable tray" autoFocus /></label>
         <label className="field-l">Question<textarea className="field" rows={3} maxLength={600} value={question} onChange={e => setQuestion(e.target.value)} placeholder="What do you need the reviewers to decide?" /></label>
+        {!vector && <label className="field-l"><span>Grid or location <span className="faint">(optional)</span></span><input className="field mono" maxLength={24} value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. C–D/4" /></label>}
         <div className="field-l">Discipline<div className="seg2">{DISCIPLINES.map(([k, l]) => <button type="button" key={k} className={discipline === k ? 'on' : ''} onClick={() => pickDiscipline(k)}>{l}</button>)}</div></div>
         <div className="field-l">Severity<div className="seg2" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>{['low', 'medium', 'high'].map(s => <button type="button" key={s} className={severity === s ? 'on' : ''} onClick={() => setSeverity(s)}>{s[0].toUpperCase() + s.slice(1)}</button>)}</div></div>
         <div className="field-l">Reviewers
           <div className="pickers">{candidates.map(m => (
             <label key={m.userId} className={`picker ${reviewers.includes(m.userId) ? 'on' : ''}`}>
               <input type="checkbox" checked={reviewers.includes(m.userId)} onChange={e => setReviewers(r => (e.target.checked ? [...r, m.userId] : r.filter(x => x !== m.userId)))} />
-              <Avatar p={m} size="sm" /><span><b>{m.name}</b><span className="faint"> · {ROLE_INFO[m.role].title}</span></span>
+              <Avatar p={m} size="sm" /><span><b>{m.name}</b>{m.userId === state.me.userId && <span className="faint"> (you)</span>}<span className="faint"> · {ROLE_INFO[m.role].title}</span></span>
             </label>
           ))}</div>
+          {onInvite && state.members.length < 3 && <span className="hint">Reviewer not on the project yet? <button type="button" className="linkbtn" onClick={onInvite}>Invite them</button> and add them when they join.</span>}
         </div>
         <ErrorLine e={err} />
       </div>

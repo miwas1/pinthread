@@ -78,6 +78,62 @@ create table if not exists local_messages (
   sent_at bigint not null);
 create index if not exists local_messages_sub on local_messages (community_id, subchannel_id, sent_at);
 create table if not exists uploads (id text primary key, mime text not null, bytes bytea not null, created_at timestamptz not null default now());
+
+-- Accounts and team projects ------------------------------------------------------------------------------------
+create table if not exists accounts (
+  id text primary key, email text not null unique, name text not null, firm text not null default '',
+  password_hash text not null, created_at timestamptz not null default now(), last_login_at timestamptz);
+alter table accounts add column if not exists sessions_valid_after timestamptz not null default '2000-01-01';
+alter table users add column if not exists account_id text references accounts(id) on delete set null;
+alter table users add column if not exists is_admin boolean not null default false;
+alter table users add column if not exists active boolean not null default true;
+alter table users add column if not exists email text;
+create unique index if not exists users_project_account on users (project_id, account_id) where account_id is not null;
+create index if not exists users_account on users (account_id);
+alter table projects add column if not exists owner_account_id text;
+alter table projects add column if not exists updated_at timestamptz not null default now();
+alter table projects alter column sheet_number drop not null;
+alter table projects alter column sheet_title drop not null;
+alter table projects alter column revision drop not null;
+update projects set kind = 'team' where kind = 'pilot';
+
+-- Drawing files uploaded by an account. Never served publicly: sheet images are read through a membership check.
+create table if not exists files (
+  id text primary key, account_id text not null, mime text not null, bytes bytea not null,
+  width int not null, height int not null, created_at timestamptz not null default now());
+create table if not exists sheets (
+  id text primary key, project_id text not null references projects(id) on delete cascade,
+  number text not null, title text not null, revision text not null, source text not null default 'vector',
+  file_id text, width int not null default 1400, height int not null default 990, ord int not null default 0,
+  created_at timestamptz not null default now(), updated_at timestamptz not null default now());
+create index if not exists sheets_project on sheets (project_id, ord);
+alter table sheets add column if not exists thumb_file_id text;
+create table if not exists sheet_revisions (
+  id bigserial primary key, sheet_id text not null references sheets(id) on delete cascade, revision text not null,
+  file_id text, created_by text, created_at timestamptz not null default now());
+alter table pins add column if not exists sheet_id text references sheets(id) on delete cascade;
+-- Projects created before sheets existed get their one built-in sheet.
+insert into sheets (id, project_id, number, title, revision, source)
+  select 's' || p.id, p.id, p.sheet_number, p.sheet_title, p.revision, 'vector' from projects p
+  where p.sheet_number is not null and not exists (select 1 from sheets s where s.project_id = p.id);
+insert into sheet_revisions (sheet_id, revision)
+  select s.id, s.revision from sheets s where not exists (select 1 from sheet_revisions r where r.sheet_id = s.id);
+update pins set sheet_id = 's' || project_id where sheet_id is null;
+create index if not exists pins_sheet on pins (sheet_id);
+
+-- A Nexconn community holds at most 50 subchannels (5 fixed + one per pin), so large projects add overflow communities.
+create table if not exists project_communities (
+  community_id text primary key, project_id text not null references projects(id) on delete cascade, ord int not null,
+  created_at timestamptz not null default now());
+insert into project_communities (community_id, project_id, ord) select community_id, id, 0 from projects on conflict do nothing;
+alter table pins add column if not exists community_id text;
+update pins set community_id = p.community_id from projects p where pins.project_id = p.id and pins.community_id is null;
+
+create table if not exists invites (
+  id text primary key, token text not null unique, project_id text not null references projects(id) on delete cascade,
+  role text not null, created_by text not null, created_at timestamptz not null default now(),
+  expires_at timestamptz not null, revoked_at timestamptz, uses int not null default 0);
+create index if not exists invites_project on invites (project_id);
 `;
 
 export async function migrate(db: Sql = sql) {

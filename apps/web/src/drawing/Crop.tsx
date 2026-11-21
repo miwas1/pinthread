@@ -1,11 +1,12 @@
 import { useRef, useState, type PointerEvent } from 'react';
-import { SHEET_INNER, type PinStatus, type Point } from '@pinthread/shared';
-import { RouteLines, SHEET_H, SHEET_W } from './SheetCanvas';
+import type { PinStatus, Point } from '@pinthread/shared';
+import { RouteLines } from './SheetCanvas';
+import { SheetArt, useSheet } from './sheet';
 import { Icon } from '../lib/icons';
 
 const MARKER: Record<PinStatus, string> = { open: '#2563EB', review: '#D97706', blocked: '#DC2626', complete: '#16A34A' };
 
-function cropBox(at: Point, route: Point[] | null | undefined, w: number, aspect: number) {
+function cropBox(SHEET_W: number, SHEET_H: number, at: Point, route: Point[] | null | undefined, w: number, aspect: number) {
   let cx = at[0] * SHEET_W, cy = at[1] * SHEET_H;
   if (route && route.length > 1) {
     const xs = route.map(p => p[0] * SHEET_W), ys = route.map(p => p[1] * SHEET_H);
@@ -16,6 +17,7 @@ function cropBox(at: Point, route: Point[] | null | undefined, w: number, aspect
 }
 
 function PinGlyph({ at, status, k }: { at: Point; status: PinStatus; k: number }) {
+  const { w: SHEET_W, h: SHEET_H } = useSheet();
   const x = at[0] * SHEET_W, y = at[1] * SHEET_H;
   return (
     <g transform={`translate(${x - 17 * k} ${y - 44 * k}) scale(${k})`}>
@@ -26,11 +28,13 @@ function PinGlyph({ at, status, k }: { at: Point; status: PinStatus; k: number }
 
 /** Static crop of the sheet around a pin (brief, cards). */
 export function Crop({ at, status, route, ghost, width = 230, aspect = 1.9 }: { at: Point; status: PinStatus; route?: Point[] | null; ghost?: Point[] | null; width?: number; aspect?: number }) {
-  const b = cropBox(at, route, width, aspect);
+  const view = useSheet();
+  // Uploaded drawings are laid out wider than the demo sheet's units, so show a little more context.
+  const b = cropBox(view.w, view.h, at, route, width * (view.sheet.source === 'image' ? 1.3 : 1), aspect);
   return (
     <div className="crop">
       <svg viewBox={`${b.x} ${b.y} ${b.w} ${b.h}`} preserveAspectRatio="xMidYMid slice" style={{ aspectRatio: String(aspect) }}>
-        <g dangerouslySetInnerHTML={{ __html: SHEET_INNER }} />
+        <SheetArt view={view} />
         {ghost && <RouteLines route={ghost} ghost />}
         {route && <RouteLines route={route} />}
         <PinGlyph at={at} status={status} k={b.w / 400} />
@@ -41,11 +45,13 @@ export function Crop({ at, status, route, ghost, width = 230, aspect = 1.9 }: { 
 
 /** Redline editor: tap to add points, drag to adjust. Coordinates are normalized to the sheet. */
 export function RedlineEditor({ at, route, onChange, ghost }: { at: Point; route: Point[]; onChange: (r: Point[]) => void; ghost?: Point[] | null }) {
-  const [span, setSpan] = useState(260);
+  const view = useSheet();
+  const { w: SHEET_W, h: SHEET_H } = view;
+  const [span, setSpan] = useState(view.sheet.source === 'image' ? 340 : 260);
   const svg = useRef<SVGSVGElement>(null);
   const drag = useRef<number | null>(null);
   const moved = useRef(false);
-  const b = cropBox(at, null, span, 1.45);
+  const b = cropBox(SHEET_W, SHEET_H, at, null, span, 1.45);
   const toSheet = (e: PointerEvent): Point | null => {
     const s = svg.current;
     if (!s) return null;
@@ -74,7 +80,7 @@ export function RedlineEditor({ at, route, onChange, ghost }: { at: Point; route
           const p = toSheet(e);
           if (p) onChange([...route, p]);
         }}>
-        <g dangerouslySetInnerHTML={{ __html: SHEET_INNER }} />
+        <SheetArt view={view} />
         {ghost && <RouteLines route={ghost} ghost />}
         <PinGlyph at={at} status="open" k={k * 1.6} />
         {route.length > 1 && <RouteLines route={route} />}
@@ -85,7 +91,7 @@ export function RedlineEditor({ at, route, onChange, ghost }: { at: Point; route
       </svg>
       <div className="redline-tools">
         <button type="button" className="tool" onClick={() => setSpan(s => Math.max(140, s - 60))} aria-label="Zoom in"><Icon name="plus" /></button>
-        <button type="button" className="tool" onClick={() => setSpan(s => Math.min(520, s + 60))} aria-label="Zoom out"><Icon name="minus" /></button>
+        <button type="button" className="tool" onClick={() => setSpan(s => Math.min(view.sheet.source === 'image' ? 900 : 520, s + 60))} aria-label="Zoom out"><Icon name="minus" /></button>
         <button type="button" className="tool" onClick={() => onChange(route.slice(0, -1))} disabled={!route.length} aria-label="Undo last point"><Icon name="undo" /></button>
         <button type="button" className="tool" onClick={() => onChange([])} disabled={!route.length} aria-label="Clear route"><Icon name="x" /></button>
       </div>

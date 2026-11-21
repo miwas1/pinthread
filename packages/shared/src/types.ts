@@ -38,8 +38,22 @@ export interface Hold {
   evidence: Evidence[];
 }
 
+export type SheetSource = 'vector' | 'image';
+
+/** A drawing sheet. 'vector' is the built-in demo sheet; 'image' is an uploaded drawing (PNG/JPEG, or a PDF page rendered in the browser). */
+export interface Sheet {
+  id: string; number: string; title: string; revision: string; source: SheetSource;
+  /** Authenticated image URL for uploaded sheets (changes with every new revision). */
+  imageUrl: string | null;
+  /** Pixel size of the uploaded image (aspect ratio of the sheet). */
+  width: number; height: number;
+  revisions: { revision: string; at: string; by: string | null }[];
+}
+
 export interface PinSummary {
-  id: string; number: string; x: number; y: number; gridRef: string;
+  id: string; sheetId: string; number: string; x: number; y: number; gridRef: string;
+  /** Nexconn community hosting this pin's private room (large projects span several communities). */
+  communityId: string;
   title: string; discipline: Discipline; severity: Severity;
   subchannelId: string; seq: number; state: PinState;
   reviewers: Person[]; memberIds: string[]; approvedBy: string[]; waitingSince: string | null; createdAt: string; roomReady: boolean;
@@ -51,17 +65,36 @@ export interface PinRecord extends PinSummary {
   recordHash: string;
 }
 
+export type ProjectKind = 'demo' | 'team';
+
 export interface ProjectState {
-  project: { id: string; name: string; kind: 'demo' | 'pilot'; communityId: string; sheet: { number: string; title: string; revision: string } };
-  me: Person & { canHold: boolean };
+  project: { id: string; name: string; kind: ProjectKind; communityId: string; sheets: Sheet[] };
+  me: Person & { canHold: boolean; isAdmin: boolean };
   members: (Person & { connected: boolean })[];
   pins: PinSummary[];
   demo: { tracker: { proposed: boolean; structConnected: boolean; approved: boolean; exported: boolean } } | null;
 }
 
 export interface SessionResponse {
-  session: string; me: Person; projectId: string; nexconnToken: string;
+  session: string; me: Person; projectId: string; nexconnToken: string; kind: ProjectKind;
+  /** Demo only: signed links that let a second device act as another role. */
   joinLinks: Partial<Record<Role, string>>; heroPinId: string | null;
 }
+
+/** A signed-in PinThread account (team projects). Demo sessions have no account. */
+export interface Account { id: string; email: string; name: string; firm: string; initials: string }
+
+export interface ProjectListItem {
+  id: string; name: string; role: Role; isAdmin: boolean;
+  sheets: { id: string; number: string; title: string; revision: string; imageUrl: string | null }[];
+  members: number; issues: number; open: number; waitingOnMe: number; complete: number;
+  createdAt: string; updatedAt: string;
+}
+
+export interface TeamMember extends Person { email: string | null; isAdmin: boolean; connected: boolean; joinedAt: string; isMe: boolean }
+export interface InviteLink { id: string; role: Role; url: string; createdAt: string; expiresAt: string; uses: number; createdBy: string }
+export interface TeamInfo { members: TeamMember[]; invites: InviteLink[]; canManage: boolean }
+
+export interface InviteInfo { projectId: string; project: string; role: Role; invitedBy: string; expiresAt: string; alreadyMember: boolean }
 
 export interface ClientConfig { chatMode: 'nexconn' | 'local'; appKey: string | null; areaCode: 'SG' | 'NA' | 'SAU' }

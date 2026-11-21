@@ -50,7 +50,8 @@ export const config = {
   poolSize: Number(env.DEMO_POOL_SIZE ?? (isProd ? 5 : 2)),
   demoTtlHours: Number(env.DEMO_TTL_HOURS ?? 48),
   maxDemoClaimsPerDay: Number(env.MAX_DEMO_CLAIMS_PER_DAY ?? 400),
-  maxPinsPerProject: 29, // 5 fixed + 29 pins stays under Nexconn's 50-subchannel cap with margin
+  maxPinsPerProject: 29, // demo: 5 fixed + 29 pins stays under Nexconn's 50-subchannel cap with margin
+  maxPinsPerTeamProject: Number(env.MAX_PINS_PER_PROJECT ?? 2000), // team projects add overflow communities as they grow
   webDist: env.WEB_DIST ?? path.resolve(here, '../../web/dist'),
 };
 export type Config = typeof config;

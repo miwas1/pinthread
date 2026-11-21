@@ -19,8 +19,8 @@ const QUESTION = `Does the dashed line show the new route? (${Date.now() % 10000
   const errors = [];
   for (const p of [mep]) p.on('pageerror', e => errors.push(`desktop: ${e.message}`));
   try {
-    step('Landing → Start as MEP lead');
-    await mep.goto(BASE);
+    step('Demo page → Start as MEP lead');
+    await mep.goto(`${BASE}/demo`);
     await mep.getByRole('button', { name: /Start as MEP lead/ }).click();
     await mep.waitForSelector('.room-head', { timeout: 20000 });
     await mep.waitForSelector('.conn[data-status="connected"]', { timeout: 15000 });

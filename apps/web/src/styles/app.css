@@ -188,11 +188,6 @@ textarea.field { resize: vertical; }
 .eyebrow { display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: var(--r-pill); background: var(--n-50); border: 1px solid var(--border); font: 500 12.5px/1 var(--font-mono); color: var(--text-2); }
 .cta { display: flex; gap: 12px; margin-top: 28px; flex-wrap: wrap; }
 .note-line { display: flex; gap: 8px; align-items: center; margin: 14px 0 0; font-size: 13.5px; }
-.stage { position: relative; height: 520px; border-radius: var(--r-xl); overflow: hidden; border: 1px solid var(--border); box-shadow: var(--e-3); background: #fff; }
-.stage-svg { width: 100%; height: 100%; display: block; }
-.stage-pin { position: absolute; width: 0; height: 0; }
-.stage-card { position: absolute; right: 20px; bottom: 84px; width: 300px; box-shadow: var(--e-3); }
-.stage-toast { position: absolute; left: 20px; bottom: 20px; right: 20px; }
 .steps4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; padding: 28px 64px 0; }
 .s4 { padding: 14px 16px; border-radius: var(--r-lg); border: 1px solid var(--border); background: var(--n-25); }
 .s4 .k { font: 600 12px/1 var(--font-mono); color: var(--text-3); }
@@ -201,9 +196,8 @@ textarea.field { resize: vertical; }
 .join { text-align: left; }
 @media (max-width: 1024px) {
   .hero { grid-template-columns: 1fr; gap: 28px; padding: 24px 20px 0; }
-  .stage { height: 360px; }
   .steps4 { grid-template-columns: 1fr 1fr; padding: 24px 20px 0; }
-  .lnav { padding: 0 20px; gap: 16px; } .lnav a { display: none; }
+  .lnav { padding: 0 20px; gap: 16px; }
   .lfoot { padding: 24px 20px 32px; }
 }
 @media (max-width: 560px) {
@@ -211,7 +205,6 @@ textarea.field { resize: vertical; }
   .lead { font-size: 16px; line-height: 24px; }
   .cta .btn { width: 100%; }
   .steps4 { grid-template-columns: 1fr; }
-  .stage-card { display: none; }
 }
 
 /* ---------- phone ---------- */

@@ -80,6 +80,9 @@ export function createLocalGateway(): ChatGateway {
     async joinCommunity(communityId, userId) {
       await sql`insert into local_members (community_id, subchannel_id, user_id) values (${communityId}, '', ${userId}) on conflict do nothing`;
     },
+    async leaveCommunity(communityId, userId) {
+      await sql`delete from local_members where community_id = ${communityId} and user_id = ${userId}`;
+    },
     async createSubchannel() { /* public by default; private lists are added explicitly */ },
     async addPrivateMembers(communityId, subId, userIds) {
       for (const u of userIds) await sql`insert into local_members values (${communityId}, ${subId}, ${u}) on conflict do nothing`;

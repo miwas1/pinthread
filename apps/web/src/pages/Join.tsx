@@ -34,7 +34,7 @@ export function Join({ projectId, role }: { projectId: string; role: string }) {
       <div className="card pad join">
         <span className="logo"><Logo size={26} />PinThread</span>
         {err ? (
-          <><h1 className="h-title" style={{ marginTop: 18 }}>This invite can't be used</h1><p className="muted">{err}</p><a className="btn btn-ink lg" href="/">Start your own demo</a></>
+          <><h1 className="h-title" style={{ marginTop: 18 }}>This invite can't be used</h1><p className="muted">{err}</p><a className="btn btn-ink lg" href="/demo">Start your own demo</a></>
         ) : !info ? (
           <p className="muted" style={{ marginTop: 18 }}><Spinner /> Checking the invite…</p>
         ) : (

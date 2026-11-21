@@ -16,6 +16,7 @@ export const PEOPLE: Record<Role, { name: string; firm: string; initials: string
 };
 
 const at = (id: keyof typeof MERIDIAN.pins) => MERIDIAN.pins[id].at as Point;
+const xy = (p: Point) => ({ x: p[0], y: p[1] });
 const n = (x: number, y: number): Point => [+(x / MERIDIAN.sheet.width).toFixed(4), +(y / MERIDIAN.sheet.height).toFixed(4)];
 const photoUrl = (key: string) => `${config.publicUrl}${FIELD_PHOTOS[key].url}`;
 
@@ -34,9 +35,14 @@ export async function seedDemoProject(): Promise<string> {
   const communityId = communityIdFor(projectId);
   const g = gateway();
   const uid = (r: Role) => demoUserIdFor(projectId, r);
+  const sheetId = newId();
   await sql.begin(async t => {
     await t`insert into projects (id, kind, name, community_id, sheet_number, sheet_title, revision, chat_mode)
       values (${projectId}, 'demo', 'Meridian Tower', ${communityId}, ${MERIDIAN.sheet.number}, ${MERIDIAN.sheet.title}, ${MERIDIAN.sheet.revision}, ${config.chatMode})`;
+    await t`insert into project_communities (community_id, project_id, ord) values (${communityId}, ${projectId}, 0)`;
+    await t`insert into sheets (id, project_id, number, title, revision, source, width, height)
+      values (${sheetId}, ${projectId}, ${MERIDIAN.sheet.number}, ${MERIDIAN.sheet.title}, ${MERIDIAN.sheet.revision}, 'vector', ${MERIDIAN.sheet.width}, ${MERIDIAN.sheet.height})`;
+    await t`insert into sheet_revisions (sheet_id, revision) values (${sheetId}, ${MERIDIAN.sheet.revision})`;
     for (const [role, p] of Object.entries(PEOPLE)) {
       await t`insert into users (id, project_id, role, name, firm, initials, can_hold) values (${uid(role as Role)}, ${projectId}, ${role}, ${p.name}, ${p.firm}, ${p.initials}, ${p.canHold})`;
     }
@@ -51,14 +57,14 @@ export async function seedDemoProject(): Promise<string> {
 
   // RFI-001: the hero. Open, with the site lead's question and field photo.
   const r1 = await createPin(projectId, uid('site'), {
-    ...xy(at('RFI-001')), title: MERIDIAN.pins['RFI-001'].title, discipline: 'mep', severity: 'high', reviewerIds: [uid('mep'), uid('struct')],
+    sheetId, ...xy(at('RFI-001')), title: MERIDIAN.pins['RFI-001'].title, discipline: 'mep', severity: 'high', reviewerIds: [uid('mep'), uid('struct')],
     question: 'SD-3 hits the B-14 soffit between C and D. Ceiling close-out is Friday. What route can MEP and Structural both accept?',
   });
   await sitePhoto(projectId, r1, uid('site'), 'img_0742', 'Looking north at C–D/4. The duct is hard against the beam soffit.');
 
   // RFI-002: In review, waiting for the Architect.
   const r2 = await createPin(projectId, uid('site'), {
-    ...xy(at('RFI-002')), title: MERIDIAN.pins['RFI-002'].title, discipline: 'elec', severity: 'medium', reviewerIds: [uid('arch'), uid('mep')],
+    sheetId, ...xy(at('RFI-002')), title: MERIDIAN.pins['RFI-002'].title, discipline: 'elec', severity: 'medium', reviewerIds: [uid('arch'), uid('mep')],
     question: 'The ER-2 sleeve lands on the edge of the core wall opening. Can the riser move, or does the opening need to change?',
   });
   await sitePhoto(projectId, r2, uid('site'), 'img_0815', 'Core C1 east wall. Sleeve is tight to the opening edge.');
@@ -69,7 +75,7 @@ export async function seedDemoProject(): Promise<string> {
 
   // RFI-003: Blocked. The exception path (evidence → clear hold → approvals).
   const r3 = await createPin(projectId, uid('site'), {
-    ...xy(at('RFI-003')), title: MERIDIAN.pins['RFI-003'].title, discipline: 'struct', severity: 'high', reviewerIds: [uid('struct'), uid('arch')],
+    sheetId, ...xy(at('RFI-003')), title: MERIDIAN.pins['RFI-003'].title, discipline: 'struct', severity: 'high', reviewerIds: [uid('struct'), uid('arch')],
     question: 'Honeycombing along the slab edge at pour 3B after the strike. Can we repair in place?',
   });
   await sitePhoto(projectId, r3, uid('site'), 'img_0611', 'Pour 3B edge after strike, grid F–G/2–3.');
@@ -81,7 +87,7 @@ export async function seedDemoProject(): Promise<string> {
 
   // RFI-004: Review complete, with a superseded v1.
   const r4 = await createPin(projectId, uid('site'), {
-    ...xy(at('RFI-004')), title: MERIDIAN.pins['RFI-004'].title, discipline: 'arch', severity: 'low', reviewerIds: [uid('arch'), uid('struct')],
+    sheetId, ...xy(at('RFI-004')), title: MERIDIAN.pins['RFI-004'].title, discipline: 'arch', severity: 'low', reviewerIds: [uid('arch'), uid('struct')],
     question: 'Bracket spacing on CW-1 does not match the fixing schedule. Which one governs?',
   });
   const v1 = await postProposal(r4, uid('arch'), { summary: 'Keep brackets at 1200 centres as drawn.', route: null, costImpact: null, scheduleImpact: 'None', approveOwn: true, basedOnVersion: null });
@@ -105,7 +111,7 @@ export async function seedDemoProject(): Promise<string> {
   return projectId;
 }
 
-const xy = (p: Point) => ({ x: p[0], y: p[1] });
+
 
 let filling = false;
 export async function ensurePool() {

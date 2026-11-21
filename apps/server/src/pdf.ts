@@ -1,25 +1,32 @@
 // RFI register PDF. Built from the same decision records as the app (buildPinRecord), so drawing, thread and PDF agree.
 import PDFDocument from 'pdfkit';
 import SVGtoPDF from 'svg-to-pdfkit';
-import { MERIDIAN, ROLE_INFO, SHEET_INNER, type PinRecord } from '@pinthread/shared';
-import type { ProjectRow } from './repo';
+import { ROLE_INFO, SHEET_INNER, sheetBox, type PinRecord } from '@pinthread/shared';
+import type { ProjectRow, SheetRow } from './repo';
 
 const C = { ink: '#111827', mute: '#4B5563', faint: '#6B7280', line: '#C3C9D2', soft: '#F4F5F7', redline: '#D61F69',
   status: { open: '#1D4ED8', review: '#92400E', blocked: '#B42318', complete: '#166534' } as Record<string, string> };
-const W = MERIDIAN.sheet.width, H = MERIDIAN.sheet.height;
 const STATUS_TEXT: Record<string, string> = { open: 'OPEN', review: 'IN REVIEW', blocked: 'BLOCKED', complete: 'REVIEW COMPLETE' };
 const fmt = (s: string | null) => s ? new Date(s).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' UTC' : '';
 const clean = (s: string) => s.replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/≤/g, '<=').replace(/✓/g, '');
 
-function cropSvg(rec: PinRecord, w: number, h: number) {
-  const cur = rec.proposals.find(p => p.current);
-  const route = cur?.route ?? null;
+/** Crop window around a pin (and its route), in sheet units. */
+function cropWindow(rec: PinRecord, sheet: SheetRow, w: number, h: number) {
+  const { w: W, h: H } = sheetBox(sheet);
+  const route = rec.proposals.find(p => p.current)?.route ?? null;
   let cx = rec.x * W, cy = rec.y * H;
   if (route) {
     const xs = route.map(p => p[0] * W), ys = route.map(p => p[1] * H);
     cx = (Math.min(...xs) + Math.max(...xs)) / 2; cy = (Math.min(...ys) + Math.max(...ys)) / 2;
   }
-  const vw = 240, vh = vw * (h / w);
+  const vw = sheet.source === 'vector' ? 240 : 300, vh = vw * (h / w);
+  return { W, H, cx, cy, vw, vh, x0: cx - vw / 2, y0: cy - vh / 2 };
+}
+
+/** Pin and route drawn over the crop. The built-in sheet is vector and drawn underneath; uploads are placed as an image. */
+function cropSvg(rec: PinRecord, sheet: SheetRow, w: number, h: number) {
+  const { W, H, x0, y0, vw, vh } = cropWindow(rec, sheet, w, h);
+  const route = rec.proposals.find(p => p.current)?.route ?? null;
   let ov = '';
   if (route) {
     const pts = route.map(([x, y]) => `${x * W},${y * H}`).join(' ');
@@ -29,7 +36,7 @@ function cropSvg(rec: PinRecord, w: number, h: number) {
   const px = rec.x * W, py = rec.y * H;
   const col = { open: '#2563EB', review: '#D97706', blocked: '#DC2626', complete: '#16A34A' }[rec.state.status];
   ov += `<path transform="translate(${px - 8.5} ${py - 22}) scale(0.5)" d="M17 42.5S4 28.6 4 17a13 13 0 0 1 26 0c0 11.6-13 25.5-13 25.5z" fill="${col}" stroke="#fff" stroke-width="2"/>`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${cx - vw / 2} ${cy - vh / 2} ${vw} ${vh}" width="${w}" height="${h}">${SHEET_INNER}${ov}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x0} ${y0} ${vw} ${vh}" width="${w}" height="${h}">${sheet.source === 'vector' ? SHEET_INNER : ''}${ov}</svg>`;
 }
 
 function glyph(doc: PDFKit.PDFDocument, status: string, x: number, y: number, color: string) {
@@ -47,7 +54,7 @@ function glyph(doc: PDFKit.PDFDocument, status: string, x: number, y: number, co
   doc.restore();
 }
 
-export async function registerPdf(project: ProjectRow, pins: PinRecord[], exportedBy: { name: string; role: string }): Promise<Buffer> {
+export async function registerPdf(project: ProjectRow, sheets: SheetRow[], images: Map<string, Buffer>, pins: PinRecord[], exportedBy: { name: string; role: string }): Promise<Buffer> {
   const doc = new PDFDocument({ size: 'A4', margins: { top: 40, bottom: 50, left: 40, right: 40 }, bufferPages: true, info: { Title: `RFI Register - ${project.name}`, Author: 'PinThread' } });
   const chunks: Buffer[] = [];
   doc.on('data', c => chunks.push(c));
@@ -61,7 +68,17 @@ export async function registerPdf(project: ProjectRow, pins: PinRecord[], export
   doc.path('M12 19.6c2.4 2.5 6.6 2.5 9.4.4').lineWidth(2.1).lineCap('round').stroke('#16A34A');
   doc.restore();
   doc.fillColor(C.ink).font('Helvetica-Bold').fontSize(19).text('RFI Register', L + 38, 40);
-  doc.font('Helvetica').fontSize(9.5).fillColor(C.mute).text(`${project.name}  ·  ${project.sheet_number} ${project.sheet_title}  ·  Rev ${project.revision}`, L + 38, 63);
+  const sheetById = new Map(sheets.map(s => [s.id, s]));
+  // pdfkit embeds an opened image once and reuses it for every crop on the sheet (openImage is untyped in @types/pdfkit).
+  const opened = new Map<string, Buffer>();
+  const imageFor = (sheetId: string) => {
+    const buf = images.get(sheetId);
+    if (!buf) return null;
+    if (!opened.has(sheetId)) opened.set(sheetId, (doc as unknown as { openImage(b: Buffer): Buffer }).openImage(buf));
+    return opened.get(sheetId)!;
+  };
+  const subtitle = sheets.length === 1 ? `${sheets[0].number} ${sheets[0].title}  ·  Rev ${sheets[0].revision}` : `${sheets.length} sheets`;
+  doc.font('Helvetica').fontSize(9.5).fillColor(C.mute).text(clean(`${project.name}  ·  ${subtitle}`), L + 38, 63, { width: R - 180 - L - 46, lineBreak: false, ellipsis: true });
   const now = new Date();
   doc.fontSize(8.5).text(`Exported ${fmt(now.toISOString())}\nby ${exportedBy.name} (${exportedBy.role})`, R - 180, 42, { width: 180, align: 'right' });
   doc.moveTo(L, 84).lineTo(R, 84).lineWidth(1.6).stroke(C.ink);
@@ -80,6 +97,7 @@ export async function registerPdf(project: ProjectRow, pins: PinRecord[], export
   let y = 150;
 
   for (const rec of pins) {
+    const sheet = sheetById.get(rec.sheetId)!;
     const cur = rec.proposals.find(p => p.current) ?? null;
     const curSignoffs = rec.signoffs.filter(s => s.proposalId === cur?.id && s.verdict !== 'withdrawn');
     const history = rec.signoffs.filter(s => s.proposalId !== cur?.id && s.verdict === 'approve');
@@ -103,12 +121,18 @@ export async function registerPdf(project: ProjectRow, pins: PinRecord[], export
     // Crop
     const cropW = 230, cropH = 132;
     doc.save().roundedRect(L, y, cropW, cropH, 4).clip();
-    SVGtoPDF(doc, cropSvg(rec, cropW, cropH), L, y, { width: cropW, height: cropH, preserveAspectRatio: 'xMidYMid slice', fontCallback: (_f: string, bold: boolean) => (bold ? 'Courier-Bold' : 'Courier') });
+    const img = sheet.source === 'image' ? imageFor(sheet.id) : null;
+    if (img) {
+      const win = cropWindow(rec, sheet, cropW, cropH), k = cropW / win.vw;
+      doc.rect(L, y, cropW, cropH).fill('#ffffff');
+      doc.image(img, L - win.x0 * k, y - win.y0 * k, { width: win.W * k, height: win.H * k });
+    }
+    SVGtoPDF(doc, cropSvg(rec, sheet, cropW, cropH), L, y, { width: cropW, height: cropH, preserveAspectRatio: 'xMidYMid slice', fontCallback: (_f: string, bold: boolean) => (bold ? 'Courier-Bold' : 'Courier') });
     doc.restore();
     doc.lineWidth(0.8).roundedRect(L, y, cropW, cropH, 4).stroke(C.line);
     if (cur?.route) {
       doc.save().moveTo(L, y + cropH + 9).lineTo(L + 16, y + cropH + 9).lineWidth(2).dash(3, { space: 2 }).stroke(C.redline).restore();
-      doc.font('Helvetica').fontSize(7.5).fillColor(C.faint).text(`${rec.state.status === 'complete' ? 'Accepted' : 'Proposed'} route v${cur.version}  ·  ${rec.gridRef}, Rev ${project.revision}`, L + 20, y + cropH + 5);
+      doc.font('Helvetica').fontSize(7.5).fillColor(C.faint).text(clean(`${rec.state.status === 'complete' ? 'Accepted' : 'Proposed'} route v${cur.version}  ·  ${rec.gridRef}, Rev ${sheet.revision}`), L + 20, y + cropH + 5);
     }
 
     // Fields
@@ -119,7 +143,7 @@ export async function registerPdf(project: ProjectRow, pins: PinRecord[], export
       doc.font(mono ? 'Courier' : 'Helvetica').fontSize(8.5).fillColor(C.ink).text(clean(v), fx + 74, fy, { width: fw - 74 });
       fy = Math.max(doc.y, fy + 11) + 3;
     };
-    field('Sheet / rev', `${project.sheet_number}  Rev ${project.revision}`, true);
+    field('Sheet / rev', `${sheet.number}  Rev ${sheet.revision}`, true);
     field('Grid', rec.gridRef, true);
     field('Discipline', `${rec.discipline.toUpperCase()}  ·  ${rec.severity[0].toUpperCase()}${rec.severity.slice(1)}`);
     field('Raised', `${rec.raisedBy.name}, ${fmt(rec.createdAt)}`);

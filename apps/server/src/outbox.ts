@@ -10,7 +10,9 @@ import { log } from './log';
 export type OutboxItem =
   | { kind: 'subchannel'; communityId: string; subchannelId: string; isPrivate: boolean; members: string[]; pinId?: string }
   | { kind: 'send'; spec: SendSpec; record?: { table: 'proposals' | 'evidence'; id: string } }
-  | { kind: 'metadata'; communityId: string; subchannelId: string; proposalId: string; metadata: Record<string, string> };
+  | { kind: 'metadata'; communityId: string; subchannelId: string; proposalId: string; metadata: Record<string, string> }
+  | { kind: 'members'; communityId: string; subchannelId: string; members: string[] }
+  | { kind: 'leave'; communityId: string; userId: string };
 
 const bus = new EventEmitter();
 export const outboxEvents = bus;
@@ -34,6 +36,14 @@ async function handle(item: OutboxItem): Promise<unknown> {
       if (item.record?.table === 'proposals' && r.messageId) await sql`update proposals set message_id = ${r.messageId} where id = ${item.record.id}`;
       if (item.record?.table === 'evidence' && r.messageId) await sql`update evidence set message_id = coalesce(message_id, ${r.messageId}) where id = ${item.record.id}`;
       return r;
+    }
+    case 'members': {
+      await g.addPrivateMembers(item.communityId, item.subchannelId, item.members);
+      return { ok: true };
+    }
+    case 'leave': {
+      await g.leaveCommunity(item.communityId, item.userId);
+      return { ok: true };
     }
     case 'metadata': {
       const [p] = await sql<{ message_id: string | null }[]>`select message_id from proposals where id = ${item.proposalId}`;

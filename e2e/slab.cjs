@@ -29,7 +29,7 @@ const photo = path.join(__dirname, '../apps/web/public/field/img_0611.jpg');
   };
   try {
     step('Start as Site lead, open the slab hold');
-    await page.goto(BASE);
+    await page.goto(`${BASE}/demo`);
     await page.getByRole('button', { name: /Start as Site lead/ }).click();
     await page.waitForSelector('.conn[data-status="connected"]', { timeout: 15000 });
     await page.locator('.issue', { hasText: 'Slab pour 3B' }).click();

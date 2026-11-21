@@ -1,51 +1,62 @@
 import { Hono, type Context } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
-import { ROLES, ROLE_INFO, type ClientConfig, type ProjectState, type Role, type SessionResponse } from '@pinthread/shared';
+import { ROLES, ROLE_INFO, type ClientConfig, type ProjectState, type Role, type SessionResponse, type TeamInfo } from '@pinthread/shared';
 import { config } from './config';
 import { sql } from './db';
 import { gateway } from './chat/gateway';
 import { canAccess, localHistory, localHub, localToken, storeAndPublish, verifyLocalToken } from './chat/local';
 import { inviteSig, requireUser, signSession, userOf, verifyInvite, type UserRow } from './auth';
 import { claimDemoProject } from './demo';
-import { addEvidence, clearHold, createPin, nudge, placeHold, postProposal, recordExport, signoff } from './domain';
+import { addEvidence, clearHold, createPin, newSheetRevision, nudge, placeHold, postProposal, recordExport, removeMember, signoff } from './domain';
 import { registerPdf } from './pdf';
-import { buildPinRecord, getProject, person, projectPeople, projectPins } from './repo';
+import { buildPinRecord, getProject, getSheet, person, projectPeople, projectPins, projectSheets, type SheetRow } from './repo';
+import { parseBody, sheetSchema } from './schemas';
+import { addSheet, communityForNewPin, createInvite, deleteTeamProject, ownFile, type InviteRow } from './team';
 import { HttpError, newLongId, rateLimiter, sha1hex, safeEqual } from './util';
 import { log } from './log';
 
 type Env = { Variables: { user: UserRow } };
 export const api = new Hono<Env>();
 
-const parse = <T extends z.ZodTypeAny>(schema: T, data: unknown): z.infer<T> => {
-  const r = schema.safeParse(data);
-  if (!r.success) throw new HttpError(400, 'invalid', r.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; '));
-  return r.data;
-};
+const parse = parseBody;
 const body = async (c: Context) => c.req.json().catch(() => ({}));
 const origin = (c: Context) => config.publicUrl || new URL(c.req.url).origin.replace(/^http:\/\/(?!localhost|127\.)/, 'https://');
 const clientIp = (c: Context) => c.req.header('x-forwarded-for')?.split(',')[0].trim() ?? 'local';
 
-async function sessionFor(c: Context, user: UserRow): Promise<SessionResponse> {
+export async function sessionFor(c: Context, user: UserRow): Promise<SessionResponse> {
   if (config.chatMode === 'local') user.token = localToken(user.id); // derived from the current secret, never cached
   else if (!user.token) {
     const token = await gateway().issueToken(user.id, user.name);
     await sql`update users set token = ${token} where id = ${user.id}`;
     user.token = token;
   }
-  const exp = Date.now() + 24 * 3600_000;
-  const [hero] = await sql<{ id: string }[]>`select id from pins where project_id = ${user.project_id} and number = 1`;
+  const project = await getProject(sql, user.project_id);
   const joinLinks: SessionResponse['joinLinks'] = {};
-  for (const r of ROLES) {
-    if (r === user.role) continue;
-    const q = new URLSearchParams({ exp: String(exp), sig: inviteSig(user.project_id, r, exp), ...(hero ? { pin: hero.id } : {}) });
-    joinLinks[r] = `${origin(c)}/j/${user.project_id}/${r}?${q}`;
+  let heroPinId: string | null = null;
+  if (project.kind === 'demo') {
+    const exp = Date.now() + 24 * 3600_000;
+    const [hero] = await sql<{ id: string }[]>`select id from pins where project_id = ${user.project_id} and number = 1`;
+    heroPinId = hero?.id ?? null;
+    for (const r of ROLES) {
+      if (r === user.role) continue;
+      const q = new URLSearchParams({ exp: String(exp), sig: inviteSig(user.project_id, r, exp), ...(hero ? { pin: hero.id } : {}) });
+      joinLinks[r] = `${origin(c)}/j/${user.project_id}/${r}?${q}`;
+    }
   }
-  await sql`insert into analytics (project_id, project_kind, user_id, name) select id, kind, ${user.id}, 'session.started' from projects where id = ${user.project_id}`;
-  return { session: await signSession(user.id, user.project_id), me: person(user), projectId: user.project_id, nexconnToken: user.token!, joinLinks, heroPinId: hero?.id ?? null };
+  await sql`insert into analytics (project_id, project_kind, user_id, name) values (${project.id}, ${project.kind}, ${user.id}, 'session.started')`;
+  // Team sessions are short-lived: the tab renews them from the account cookie on every load.
+  const session = await signSession(user.id, user.project_id, project.kind === 'demo' ? '7d' : '12h');
+  return { session, me: person(user), projectId: user.project_id, kind: project.kind, nexconnToken: user.token!, joinLinks, heroPinId };
+}
+
+async function assertDemo(projectId: string) {
+  const [p] = await sql<{ kind: string }[]>`select kind from projects where id = ${projectId}`;
+  if (!p || p.kind !== 'demo') throw new HttpError(404, 'not_found', 'That demo project no longer exists.');
 }
 
 async function userByRole(projectId: string, role: Role) {
+  await assertDemo(projectId); // acting as a role is a demo feature; team members are real accounts
   const [u] = await sql<UserRow[]>`select * from users where project_id = ${projectId} and role = ${role}`;
   if (!u) throw new HttpError(404, 'not_found', 'That project no longer exists. Start a new demo.');
   return u;
@@ -84,6 +95,7 @@ api.get('/demo/invite', async c => {
   const projectId = c.req.query('projectId') ?? '', role = c.req.query('role') ?? '';
   const exp = Number(c.req.query('exp')), sig = c.req.query('sig') ?? '';
   const r = verifyInvite(projectId, role, exp, sig);
+  await assertDemo(projectId);
   const u = await userByRole(projectId, r);
   const [p] = await sql<{ name: string }[]>`select name from projects where id = ${projectId}`;
   return c.json({ project: p?.name ?? 'Meridian Tower', person: person(u), title: ROLE_INFO[r].title });
@@ -107,15 +119,16 @@ api.get('/admin/metrics', async c => {
   if (!config.adminKey || c.req.query('key') !== config.adminKey) throw new HttpError(403, 'forbidden', 'Admin key required.');
   const byKind = async (kind: string) => {
     const [r] = await sql`select
-      (select count(*)::int from projects where kind = ${kind} and (kind = 'pilot' or claimed_at is not null)) as projects,
+      (select count(*)::int from projects where kind = ${kind} and (kind = 'team' or claimed_at is not null)) as projects,
       (select count(distinct u.id)::int from users u join projects p on p.id = u.project_id where p.kind = ${kind} and u.first_connected_at is not null) as users_connected,
       (select count(distinct pr.user_id)::int from presence pr join users u on u.id = pr.user_id join projects p on p.id = u.project_id where p.kind = ${kind} and pr.status = '0') as users_connected_webhook,
       (select count(*)::int from pins pi join projects p on p.id = pi.project_id where p.kind = ${kind} and pi.status = 'complete' and pi.number > case when ${kind} = 'demo' then 4 else 0 end) as issues_completed_new,
+      (select count(*)::int from accounts) as accounts,
       (select count(*)::int from events e join projects p on p.id = e.project_id where p.kind = ${kind} and e.type = 'signoff.approve') as approvals,
       (select count(*)::int from projects where kind = ${kind} and exported_at is not null) as registers_exported`;
     return r;
   };
-  return c.json({ generatedAt: new Date().toISOString(), chatMode: config.chatMode, pilot: await byKind('pilot'), demo: await byKind('demo') });
+  return c.json({ generatedAt: new Date().toISOString(), chatMode: config.chatMode, team: await byKind('team'), demo: await byKind('demo') });
 });
 
 // ---------------------------------------------------------------- authenticated
@@ -127,7 +140,7 @@ authed.get('/me', async c => c.json(await sessionFor(c, userOf(c))));
 
 authed.post('/demo/switch-role', async c => {
   const { role } = parse(z.object({ role: z.enum(ROLES) }), await body(c));
-  return c.json(await sessionFor(c, await userByRole(userOf(c).project_id, role)));
+  return c.json(await sessionFor(c, await userByRole(userOf(c).project_id, role))); // userByRole refuses team projects
 });
 
 authed.post('/me/connected', async c => {
@@ -142,12 +155,13 @@ authed.get('/projects/:id/state', async c => {
   const project = await getProject(sql, id);
   const people = await projectPeople(sql, id);
   const pins = await projectPins(sql, id);
+  const sheets = await projectSheets(sql, id);
   const struct = [...people.values()].find(p => p.role === 'struct');
   const hero = pins.find(p => p.number === 'RFI-001');
   const state: ProjectState = {
-    project: { id, name: project.name, kind: project.kind, communityId: project.community_id, sheet: { number: project.sheet_number, title: project.sheet_title, revision: project.revision } },
-    me: { ...person(u), canHold: u.can_hold },
-    members: [...people.values()].map(p => ({ ...person(p), connected: !!p.first_connected_at || (config.chatMode === 'local' && localHub.online(p.id)) })),
+    project: { id, name: project.name, kind: project.kind, communityId: project.community_id, sheets },
+    me: { ...person(u), canHold: u.can_hold, isAdmin: u.is_admin },
+    members: [...people.values()].filter(p => p.active).map(p => ({ ...person(p), connected: !!p.first_connected_at || (config.chatMode === 'local' && localHub.online(p.id)) })),
     pins,
     demo: project.kind === 'demo' ? { tracker: {
       proposed: !!hero && hero.state.status !== 'open',
@@ -170,10 +184,14 @@ authed.post('/projects/:id/pins', async c => {
   const u = userOf(c), id = c.req.param('id');
   assertProject(u, id);
   const b = parse(z.object({
+    sheetId: z.string().max(20).optional(), gridRef: z.string().trim().max(24).nullable().optional(),
     x: z.number().min(0).max(1), y: z.number().min(0).max(1), title: z.string().trim().min(3).max(90), question: z.string().trim().min(3).max(600),
     discipline: z.enum(['mep', 'struct', 'arch', 'elec']), severity: z.enum(['low', 'medium', 'high']), reviewerIds: z.array(z.string().max(64)).min(1).max(6),
   }), await body(c));
-  const pinId = await createPin(id, u.id, b);
+  const project = await getProject(sql, id);
+  const sheetId = b.sheetId ?? (await sql<{ id: string }[]>`select id from sheets where project_id = ${id} order by ord, created_at limit 1`)[0]?.id;
+  if (!sheetId) throw new HttpError(400, 'no_sheet', 'Add a drawing sheet first.');
+  const pinId = await createPin(id, u.id, { ...b, sheetId }, await communityForNewPin(project));
   return c.json(await buildPinRecord(sql, pinId), 201);
 });
 
@@ -197,7 +215,7 @@ authed.post('/pins/:id/signoffs', async c => {
     const [hit] = await sql<{ response: unknown }[]>`select response from idempotency where key = ${key} and user_id = ${u.id}`;
     if (hit) return c.json({ record: await buildPinRecord(sql, id), duplicate: true, replayed: true });
   }
-  const b = parse(z.object({ proposalId: z.string().max(20), revision: z.string().max(4), verdict: z.enum(['approve', 'request_change']), comment: z.string().trim().max(500).nullable().default(null) }), await body(c));
+  const b = parse(z.object({ proposalId: z.string().max(20), revision: z.string().max(8), verdict: z.enum(['approve', 'request_change']), comment: z.string().trim().max(500).nullable().default(null) }), await body(c));
   const { duplicate } = await signoff(id, u.id, b);
   const record = await buildPinRecord(sql, id);
   const response = { record, duplicate };
@@ -241,12 +259,129 @@ authed.get('/projects/:id/register.pdf', async c => {
   const u = userOf(c), id = c.req.param('id');
   assertProject(u, id);
   const project = await getProject(sql, id);
-  const ids = (await sql<{ id: string }[]>`select id from pins where project_id = ${id} order by number`).map(r => r.id);
+  const sheets = await sql<SheetRow[]>`select * from sheets where project_id = ${id} order by ord, created_at`;
+  const ids = (await sql<{ id: string }[]>`select p.id from pins p join sheets s on s.id = p.sheet_id where p.project_id = ${id} order by s.ord, s.created_at, p.number`).map(r => r.id);
   const recs = [];
   for (const pid of ids) recs.push(await buildPinRecord(sql, pid));
-  const pdf = await registerPdf(project, recs, { name: u.name, role: ROLE_INFO[u.role].title });
+  const images = new Map<string, Buffer>();
+  for (const s of sheets) {
+    if (s.source !== 'image' || !s.file_id || !recs.some(r => r.sheetId === s.id)) continue;
+    const [f] = await sql<{ bytes: Buffer }[]>`select bytes from files where id = ${s.file_id}`;
+    if (f) images.set(s.id, f.bytes);
+  }
+  const pdf = await registerPdf(project, sheets, images, recs, { name: u.name, role: ROLE_INFO[u.role].title });
   await recordExport(id, u.id);
-  return new Response(new Uint8Array(pdf), { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="RFI-register-${project.sheet_number}-Rev${project.revision}.pdf"`, 'Cache-Control': 'no-store' } });
+  const slug = project.name.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'project';
+  return new Response(new Uint8Array(pdf), { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="RFI-register-${slug}.pdf"`, 'Cache-Control': 'no-store' } });
+});
+
+// ---------------------------------------------------------------- team projects: sheets, people, settings
+
+/** Drawings change what every approval is measured against, so admins and site leads manage them. */
+const canManageSheets = (u: UserRow) => u.is_admin || u.role === 'site';
+
+async function assertTeam(u: UserRow, projectId: string, adminOnly = false) {
+  assertProject(u, projectId);
+  const project = await getProject(sql, projectId);
+  if (project.kind !== 'team') throw new HttpError(400, 'demo_project', 'This is a demo project. Create your own project to do this.');
+  if (adminOnly && !u.is_admin) throw new HttpError(403, 'admin_only', 'Only a project admin can do this.');
+  return project;
+}
+
+authed.post('/projects/:id/sheets', async c => {
+  const u = userOf(c), id = c.req.param('id');
+  await assertTeam(u, id);
+  if (!canManageSheets(u)) throw new HttpError(403, 'forbidden', 'Only project admins and site leads can add sheets.');
+  const b = parse(sheetSchema, await body(c));
+  const sheetId = await addSheet(id, u, b);
+  return c.json({ sheetId, sheets: await projectSheets(sql, id) }, 201);
+});
+
+authed.post('/sheets/:id/revisions', async c => {
+  const u = userOf(c);
+  const sheet = await getSheet(sql, c.req.param('id'));
+  await assertTeam(u, sheet.project_id);
+  if (!canManageSheets(u)) throw new HttpError(403, 'forbidden', 'Only project admins and site leads can publish new revisions.');
+  const b = parse(z.object({ revision: z.string().trim().min(1, 'Enter the new revision label.').max(8), fileId: z.string().max(40), thumbFileId: z.string().max(40).nullable().default(null) }), await body(c));
+  if (!u.account_id) throw new HttpError(403, 'forbidden', 'Sign in to upload drawings.');
+  const file = await ownFile(u.account_id, b.fileId);
+  if (b.thumbFileId) await ownFile(u.account_id, b.thumbFileId);
+  const r = await newSheetRevision(sheet.id, u.id, { revision: b.revision, fileId: file.id, thumbFileId: b.thumbFileId, width: file.width, height: file.height });
+  return c.json({ ...r, sheets: await projectSheets(sql, sheet.project_id) });
+});
+
+const inviteDto = (c: Context, i: InviteRow & { by?: string | null }) => ({
+  id: i.id, role: i.role, url: `${origin(c)}/invite/${i.token}`, createdAt: new Date(i.created_at).toISOString(),
+  expiresAt: new Date(i.expires_at).toISOString(), uses: i.uses, createdBy: i.by ?? '',
+});
+
+authed.get('/projects/:id/team', async c => {
+  const u = userOf(c), id = c.req.param('id');
+  await assertTeam(u, id);
+  const people = [...(await projectPeople(sql, id)).values()].filter(p => p.active);
+  const invites = u.is_admin ? await sql<(InviteRow & { by: string | null })[]>`select i.*, x.name as by from invites i left join users x on x.id = i.created_by
+    where i.project_id = ${id} and i.revoked_at is null and i.expires_at > now() order by i.created_at desc` : [];
+  const team: TeamInfo = {
+    canManage: u.is_admin,
+    members: people.map(p => ({ ...person(p), email: u.is_admin || p.id === u.id ? p.email : null, isAdmin: p.is_admin, isMe: p.id === u.id,
+      connected: !!p.first_connected_at || (config.chatMode === 'local' && localHub.online(p.id)), joinedAt: new Date(p.created_at).toISOString() })),
+    invites: invites.map(i => inviteDto(c, i)),
+  };
+  return c.json(team);
+});
+
+authed.post('/projects/:id/invites', async c => {
+  const u = userOf(c), id = c.req.param('id');
+  await assertTeam(u, id, true);
+  const { role } = parse(z.object({ role: z.enum(ROLES) }), await body(c));
+  const [{ n }] = await sql<{ n: number }[]>`select count(*)::int as n from invites where project_id = ${id} and revoked_at is null and expires_at > now()`;
+  if (n >= 30) throw new HttpError(409, 'too_many_invites', 'Turn off some old invite links first.');
+  const inv = await createInvite(id, role, u.id);
+  return c.json(inviteDto(c, { ...inv, by: u.name }), 201);
+});
+
+authed.post('/projects/:id/invites/:inviteId/revoke', async c => {
+  const u = userOf(c), id = c.req.param('id');
+  await assertTeam(u, id, true);
+  await sql`update invites set revoked_at = now() where id = ${c.req.param('inviteId')} and project_id = ${id} and revoked_at is null`;
+  return c.json({ ok: true });
+});
+
+authed.post('/projects/:id/members/:userId/remove', async c => {
+  const u = userOf(c), id = c.req.param('id'), target = c.req.param('userId');
+  await assertTeam(u, id, true);
+  if (target === u.id) throw new HttpError(400, 'self', "You can't remove yourself. Make someone else an admin first.");
+  return c.json(await removeMember(id, target, u.id));
+});
+
+authed.post('/projects/:id/members/:userId/admin', async c => {
+  const u = userOf(c), id = c.req.param('id'), target = c.req.param('userId');
+  await assertTeam(u, id, true);
+  const { admin } = parse(z.object({ admin: z.boolean() }), await body(c));
+  if (!admin) {
+    const [{ n }] = await sql<{ n: number }[]>`select count(*)::int as n from users where project_id = ${id} and active and is_admin and id <> ${target}`;
+    if (n < 1) throw new HttpError(409, 'last_admin', 'A project needs at least one admin.');
+  }
+  const [r] = await sql`update users set is_admin = ${admin} where id = ${target} and project_id = ${id} and active returning id`;
+  if (!r) throw new HttpError(404, 'not_found', 'That person is not on this project.');
+  return c.json({ ok: true });
+});
+
+authed.patch('/projects/:id', async c => {
+  const u = userOf(c), id = c.req.param('id');
+  await assertTeam(u, id, true);
+  const { name } = parse(z.object({ name: z.string().trim().min(2, 'Give the project a name.').max(80) }), await body(c));
+  await sql`update projects set name = ${name}, updated_at = now() where id = ${id}`;
+  return c.json({ ok: true });
+});
+
+authed.post('/projects/:id/delete', async c => {
+  const u = userOf(c), id = c.req.param('id');
+  const project = await assertTeam(u, id, true);
+  const { confirm } = parse(z.object({ confirm: z.string() }), await body(c));
+  if (confirm.trim() !== project.name) throw new HttpError(400, 'confirm', 'Type the project name exactly to delete it.');
+  await deleteTeamProject(id);
+  return c.json({ ok: true });
 });
 
 api.route('/', authed);

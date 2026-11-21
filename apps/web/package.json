@@ -17,6 +17,7 @@
     "@nexconn/engine": "26.5.1",
     "@pinthread/shared": "workspace:*",
     "@tanstack/react-query": "5.90.5",
+    "pdfjs-dist": "5.4.624",
     "qrcode.react": "4.2.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",

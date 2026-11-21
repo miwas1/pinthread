@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { ROLE_INFO, personalLabel, roleList, type Hold, type Person, type PinRecord, type PinSummary, type ProjectState } from '@pinthread/shared';
 import { Avatar, Spinner, StatusChip, useToast } from '../components/ui';
 import { Crop } from '../drawing/Crop';
+import { useSheet } from '../drawing/sheet';
 import { ApiError, api } from '../lib/api';
 import { ago, clock, compressImage, uuid } from '../lib/format';
 import { Icon } from '../lib/icons';
@@ -82,6 +83,7 @@ function SignoffBar({ record, me, revision }: { record: PinRecord; me: Person; r
 
 export function Room({ pin, record, state, onClose, openModal, onRegister, compact, thread }: Props) {
   const me = state.me;
+  const { sheet } = useSheet();
   const toast = useToast();
   const people = useMemo(() => new Map(state.members.map(m => [m.userId, m as Person])), [state.members]);
   const isMember = pin.memberIds.includes(me.userId);
@@ -134,7 +136,7 @@ export function Room({ pin, record, state, onClose, openModal, onRegister, compa
         </div>
         <h1 className="h-title">{pin.title}</h1>
         <div className="row wrap" style={{ marginTop: 6, gap: 6 }}>
-          <span className="ref">{pin.number} · {state.project.sheet.number} Rev {state.project.sheet.revision} · Grid {pin.gridRef}</span>
+          <span className="ref">{pin.number} · {sheet.number} Rev {sheet.revision} · Grid {pin.gridRef}</span>
           <span className={`tag sev-${pin.severity}`}>{pin.severity}</span><span className={`tag ${pin.discipline === 'elec' ? 'mep' : pin.discipline}`}>{pin.discipline}</span>
         </div>
       </div>
@@ -176,7 +178,7 @@ export function Room({ pin, record, state, onClose, openModal, onRegister, compa
         </div>
       </div>
 
-      {record && <SignoffBar record={record} me={me} revision={state.project.sheet.revision} />}
+      {record && <SignoffBar record={record} me={me} revision={sheet.revision} />}
       {isMember && (
         <div className="composer-wrap">
           {quote && <div className="quote-chip"><Icon name="reply" size="sm" /><span className="grow">Replying to <b>{quote.name}</b>: {quote.text.slice(0, 80)}</span><button className="tool sm" onClick={() => setQuote(null)} aria-label="Cancel reply"><Icon name="x" size="sm" /></button></div>}

@@ -103,6 +103,9 @@ export function createNexconnGateway(cfg: { appKey: string; appSecret: string; d
     async joinCommunity(communityId, userId) {
       await api.post('/v4/community-channel/join', { channelId: communityId, userId });
     },
+    async leaveCommunity(communityId, userId) {
+      await api.post('/v4/community-channel/leave', { channelId: communityId, userId });
+    },
     async createSubchannel(communityId, subchannelId, isPrivate) {
       if (!isValidSubchannelId(subchannelId)) throw new Error(`Invalid subchannel id ${subchannelId}`);
       try { await api.post('/v4/community-channel/subchannel/create', { channelId: communityId, subchannelId, channelVisibility: isPrivate ? 1 : 0 }); }
