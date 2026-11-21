@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Mobile · reviewer</title>
+<link rel="stylesheet" href="tokens.css"><link rel="stylesheet" href="ui.css">
+<script src="../../assets/meridian/sheet.js"></script><script src="mock.js"></script>
+<style>
+  body { font-size: var(--text-lg); line-height: var(--lh-lg); }
+  .canvas { position: absolute; top: 96px; left: 0; right: 0; bottom: 0; }
+  .bsheet { height: 560px; }
+  .content { flex: 1; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; gap: 12px; padding: 12px 16px; background: var(--bg); }
+  .signoff { flex-direction: column; align-items: stretch; gap: 10px; padding: 12px 16px 10px; }
+</style></head>
+<body><div class="phone">
+  <div class="statusbar"><span>10:50</span><span style="font-size:12px;letter-spacing:1px">●●● 5G ▮▮▮</span></div>
+  <div class="mtop">
+    <span id="logo"></span><span class="revpill">C-103 · Rev B</span><span class="grow"></span>
+    <span class="conn" style="height:26px;padding:0 9px">Live</span><span id="me"></span>
+  </div>
+  <section class="canvas" id="canvas">
+    <div class="float" style="left:12px;right:12px;top:10px"><div class="row" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);padding:7px 10px;box-shadow:var(--e-2);font-size:12.5px;gap:8px" id="jumpnote"></div></div>
+  </section>
+  <div class="bsheet">
+    <div class="grab"></div>
+    <div style="padding:4px 16px 12px;border-bottom:1px solid var(--border)">
+      <div class="row"><span id="st"></span><span class="grow"></span><span class="ref">RFI-001</span></div>
+      <h1 class="h-title" style="margin-top:8px;font-size:18px">Supply duct SD-3 crosses Beam B-14</h1>
+      <div class="ref" style="margin-top:6px">C-103 Rev B · Grid C–D/4 · <span style="color:var(--review-text)">waiting on you · 9 min</span></div>
+    </div>
+    <div class="content" id="content"></div>
+    <div class="composer" style="padding:8px 12px"><span class="tool" id="c-cam"></span><div class="input" style="min-height:40px;font-size:15px">Message…</div><span class="send" id="c-send"></span></div>
+    <div class="signoff">
+      <div class="what">You're reviewing <b style="display:inline">Proposal v1 on Rev B</b> as Structural</div>
+      <div class="row" style="gap:10px"><button class="btn btn-outline lg" style="flex:1">Request change</button><button class="btn btn-approve lg" style="flex:1.3" id="approve"></button></div>
+    </div>
+    <div class="homebar"><i></i></div>
+  </div>
+</div>
+<script>
+const { icon, chip, mountSheet, crop, logo, av, ROUTE } = PT;
+document.getElementById('logo').innerHTML = logo(26);
+document.getElementById('me').innerHTML = av('DO', 'struct');
+document.getElementById('st').innerHTML = chip('review', 'In review · Waiting for you');
+document.getElementById('c-cam').innerHTML = icon('camera');
+document.getElementById('c-send').innerHTML = icon('send', 'sm');
+document.getElementById('approve').innerHTML = icon('check', 'sm') + 'Approve proposal';
+document.getElementById('jumpnote').innerHTML = `<span style="color:var(--text-2)">${icon('at','sm')}</span><span class="grow">Opened from <b>Jump to pin</b> · Marco in <span class="mono">#discstruct</span></span><span class="faint">${icon('x','sm')}</span>`;
+document.getElementById('content').innerHTML = `
+  <div class="card proposal">
+    <div class="ch"><span class="tag ver">v1</span><b style="font-size:14px">Proposal</b><span class="faint" style="font-size:12px">Marco Ruiz · MEP</span></div>
+    <div class="cb" style="padding:10px 12px">
+      <div class="crop">${crop({ x: 378, y: 342, w: 214, h: 96, route: ROUTE, pinId: 'RFI-001' })}</div>
+      <p style="margin:8px 0 0;font-size:14px;line-height:20px">Drop SD-3 150 mm and cross B-14 through existing web opening WO-2 near D/4.</p>
+    </div>
+    <div class="cf"><span class="appr ok">${av('MR','mep','ok','sm')}MEP 10:42</span><span class="appr wait">${av('DO','struct','wait','sm')}You</span></div>
+  </div>
+  <div class="msg mine"><div class="body"><div class="meta"><span>10:49</span><b>You</b></div><div class="bubble"><span class="quote">Proposal v1</span>Does the dashed line show the new route?</div></div></div>
+  <div class="msg"><span>${av('MR','mep')}</span><div class="body"><div class="meta"><b>Marco Ruiz</b><span>10:50</span></div><div class="bubble">Yes. It dips 150 under the main and crosses at WO-2, clear of the D/4 column.</div></div></div>`;
+mountSheet(document.getElementById('canvas'), {
+  cx: 486, cy: 381 + (374 - 120) / 1.35, zoom: 1.35, route: ROUTE,
+  pins: [{ id: 'RFI-001', status: 'review', sel: true, text: 'In review' }],
+});
+</script></body></html>

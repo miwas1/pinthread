@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>PinThread · landing</title>
+<link rel="stylesheet" href="tokens.css"><link rel="stylesheet" href="ui.css">
+<script src="../../assets/meridian/sheet.js"></script><script src="mock.js"></script>
+<style>
+  body { background: var(--surface); }
+  .nav { height: 64px; display: flex; align-items: center; gap: 28px; padding: 0 64px; }
+  .nav a { color: var(--text-2); font-size: 14px; font-weight: 500; text-decoration: none; }
+  .hero { display: grid; grid-template-columns: 560px 1fr; gap: 56px; padding: 40px 64px 0; }
+  h1 { font-size: var(--text-4xl); line-height: var(--lh-4xl); letter-spacing: -.025em; font-weight: 600; margin: 18px 0 0; }
+  h1 em { font-style: normal; color: var(--complete); }
+  .lead { font-size: 18px; line-height: 28px; color: var(--text-2); margin: 20px 0 0; max-width: 520px; }
+  .eyebrow { display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; border-radius: var(--r-pill); background: var(--n-50); border: 1px solid var(--border); font: 500 12.5px/1 var(--font-mono); color: var(--text-2); }
+  .stage { position: relative; height: 560px; border-radius: var(--r-xl); overflow: hidden; border: 1px solid var(--border); box-shadow: var(--e-3); }
+  .steps4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; padding: 28px 64px 0; }
+  .s4 { padding: 14px 16px; border-radius: var(--r-lg); border: 1px solid var(--border); background: var(--n-25); }
+  .s4 .k { font: 600 12px/1 var(--font-mono); color: var(--text-3); }
+  .s4 b { display: block; margin-top: 8px; font-size: 15px; } .s4 span { display: block; font-size: 13px; color: var(--text-2); margin-top: 4px; line-height: 18px; }
+</style></head>
+<body>
+<nav class="nav"><span class="logo" id="logo" style="font-size:18px"></span><span class="grow"></span><a>How it works</a><a>Register sample (PDF)</a><a>GitHub</a><span class="tag" style="height:26px;padding:0 10px;font-size:11px">Built on Nexconn Chat</span></nav>
+<section class="hero">
+  <div>
+    <span class="eyebrow">For site leads, engineers and MEP coordinators</span>
+    <h1>Drawing questions, answered <em>on the drawing.</em></h1>
+    <p class="lead">Drop a pin where the clash is. The right reviewers get the crop, the proposed fix and the question in one thread. The pin turns green on everyone's drawing when the last one signs off.</p>
+    <div class="row" style="margin-top:28px;gap:12px"><button class="btn btn-ink xl" id="cta"></button><button class="btn btn-outline xl">Start as Site lead</button></div>
+    <p class="faint" style="margin:14px 0 0;font-size:13.5px" id="note"></p>
+  </div>
+  <div class="stage canvas" id="stage">
+    <div class="float" style="right:20px;bottom:84px;width:300px" id="card"></div>
+    <div class="float" style="left:20px;bottom:20px" id="toast"></div>
+  </div>
+</section>
+<section class="steps4" id="steps"></section>
+<script>
+const { icon, chip, mountSheet, crop, logo, av, ROUTE } = PT;
+document.getElementById('logo').innerHTML = logo(26) + 'PinThread';
+document.getElementById('cta').innerHTML = 'Start as MEP lead' + icon('chevron', 'sm');
+document.getElementById('note').innerHTML = `${icon('phone','sm')} No sign-up. You get your own Meridian Tower project. Keep a phone handy for the second reviewer.`;
+document.getElementById('card').innerHTML = `<div class="card proposal" style="box-shadow:var(--e-3)">
+  <div class="ch"><span class="tag ver">v1</span><b style="font-size:13.5px">Proposal</b><span class="faint" style="font-size:12px">Marco Ruiz · MEP</span></div>
+  <div class="cb" style="padding:10px"><div class="crop">${crop({ x: 378, y: 342, w: 214, h: 96, route: ROUTE, pinId: 'RFI-001', pinStatus: 'complete' })}</div></div>
+  <div class="cf"><span class="appr ok">${av('MR','mep','ok','sm')}MEP</span><span class="appr ok">${av('DO','struct','ok','sm')}Structural</span></div></div>`;
+document.getElementById('toast').innerHTML = `<div class="toast"><span class="ok">${icon('check','sm')}</span><span><b>Dana Okafor approved.</b> RFI-001 is green on every device.</span></div>`;
+document.getElementById('steps').innerHTML = [
+  ['01', 'Propose the reroute', 'Draw the new duct route on the clash and confirm it for MEP.'],
+  ['02', 'Bring in Structural', 'Scan the QR on a phone. Dana gets a Jump to pin alert.'],
+  ['03', 'Approve on the spot', 'Same location, same revision. One tap, and the pin turns green.'],
+  ['04', 'Hand it over', 'Refresh, then export the register. Drawing, thread and PDF agree.'],
+].map(([k, t, d]) => `<div class="s4"><span class="k">${k}</span><b>${t}</b><span>${d}</span></div>`).join('');
+mountSheet(document.getElementById('stage'), {
+  cx: 640, cy: 470, zoom: 1.05, route: ROUTE,
+  pins: [
+    { id: 'RFI-001', status: 'complete', sel: true },
+    { id: 'RFI-002', status: 'review', label: false },
+    { id: 'RFI-003', status: 'blocked' },
+  ],
+});
+</script></body></html>

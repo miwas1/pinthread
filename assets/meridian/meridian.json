@@ -1,0 +1,145 @@
+{
+  "sheet": {
+    "number": "C-103",
+    "title": "Level 03 Coordination Plan",
+    "revision": "B",
+    "width": 1400,
+    "height": 990
+  },
+  "gridlines": {
+    "numbers": [
+      {
+        "id": "1",
+        "x": 120
+      },
+      {
+        "id": "2",
+        "x": 240
+      },
+      {
+        "id": "3",
+        "x": 360
+      },
+      {
+        "id": "4",
+        "x": 480
+      },
+      {
+        "id": "5",
+        "x": 600
+      },
+      {
+        "id": "6",
+        "x": 720
+      },
+      {
+        "id": "7",
+        "x": 840
+      },
+      {
+        "id": "8",
+        "x": 960
+      },
+      {
+        "id": "9",
+        "x": 1080
+      }
+    ],
+    "letters": [
+      {
+        "id": "A",
+        "y": 120
+      },
+      {
+        "id": "B",
+        "y": 225
+      },
+      {
+        "id": "C",
+        "y": 330
+      },
+      {
+        "id": "D",
+        "y": 435
+      },
+      {
+        "id": "E",
+        "y": 540
+      },
+      {
+        "id": "F",
+        "y": 645
+      },
+      {
+        "id": "G",
+        "y": 750
+      },
+      {
+        "id": "H",
+        "y": 855
+      }
+    ]
+  },
+  "pins": {
+    "RFI-001": {
+      "at": [
+        0.3429,
+        0.3859
+      ],
+      "grid": "C–D/4",
+      "title": "Supply duct SD-3 crosses Beam B-14"
+    },
+    "RFI-002": {
+      "at": [
+        0.6029,
+        0.5455
+      ],
+      "grid": "E/7",
+      "title": "Electrical riser ER-2 penetration through core wall"
+    },
+    "RFI-003": {
+      "at": [
+        0.2143,
+        0.6864
+      ],
+      "grid": "F–G/2–3",
+      "title": "Slab pour 3B: honeycombing at edge"
+    },
+    "RFI-004": {
+      "at": [
+        0.1714,
+        0.1141
+      ],
+      "grid": "A/1–3",
+      "title": "Curtain wall bracket spacing at grid A"
+    }
+  },
+  "routes": {
+    "RFI-001/v1": [
+      [
+        0.2786,
+        0.3859
+      ],
+      [
+        0.3071,
+        0.3859
+      ],
+      [
+        0.3229,
+        0.4162
+      ],
+      [
+        0.3629,
+        0.4162
+      ],
+      [
+        0.3786,
+        0.3859
+      ],
+      [
+        0.4143,
+        0.3859
+      ]
+    ]
+  }
+}

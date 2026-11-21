@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>RFI register · PDF page</title>
+<link rel="stylesheet" href="tokens.css"><link rel="stylesheet" href="ui.css">
+<script src="../../assets/meridian/sheet.js"></script><script src="mock.js"></script>
+<style>
+  /* A4 portrait at 96 dpi. Print-safe: status is always text + shape; works in greyscale. */
+  body { background: #fff; font-size: 11px; line-height: 15px; color: #111827; }
+  .page { width: 794px; height: 1123px; padding: 44px 48px 36px; display: flex; flex-direction: column; }
+  .hdr { display: flex; align-items: flex-start; gap: 16px; padding-bottom: 14px; border-bottom: 2px solid #111827; }
+  .hdr h1 { font-size: 22px; line-height: 26px; margin: 0; letter-spacing: -.01em; }
+  .sum { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid #C3C9D2; border-radius: 6px; margin: 14px 0 18px; }
+  .sum div { padding: 8px 10px; border-left: 1px solid #C3C9D2; } .sum div:first-child { border-left: 0; }
+  .sum b { display: block; font-size: 18px; line-height: 22px; font-family: var(--font-mono); }
+  .rec { border: 1px solid #C3C9D2; border-radius: 8px; overflow: hidden; margin-bottom: 14px; break-inside: avoid; }
+  .rh { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #F4F5F7; border-bottom: 1px solid #C3C9D2; }
+  .rh .t { font-size: 13px; font-weight: 600; }
+  .pst { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 7px; border: 1.5px solid currentColor; border-radius: 4px; font: 600 10px/1 var(--font-mono); letter-spacing: .05em; }
+  .pst .glyph { width: 11px; height: 11px; }
+  .rb { display: grid; grid-template-columns: 290px 1fr; gap: 14px; padding: 12px; }
+  .crop { border-color: #C3C9D2; }
+  table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+  th { text-align: left; font: 600 9px/1 var(--font-mono); letter-spacing: .06em; color: #4B5563; text-transform: uppercase; padding: 5px 6px; border-bottom: 1px solid #C3C9D2; }
+  td { padding: 5px 6px; border-bottom: 1px solid #E3E6EB; vertical-align: top; }
+  .f { display: grid; grid-template-columns: 92px 1fr; gap: 3px 10px; }
+  .f dt { color: #6B7280; } .f dd { margin: 0; font-weight: 500; }
+  .sec { font: 600 9px/1 var(--font-mono); letter-spacing: .08em; color: #6B7280; text-transform: uppercase; margin: 10px 0 5px; }
+  .outst { display: flex; gap: 8px; padding: 8px 10px; border: 1.5px dashed #B42318; border-radius: 6px; color: #B42318; font-weight: 600; }
+  .ftr { margin-top: auto; display: flex; gap: 12px; padding-top: 10px; border-top: 1px solid #C3C9D2; color: #6B7280; font-size: 9.5px; }
+  .qr { width: 54px; height: 54px; background:
+    conic-gradient(from 90deg at 30% 30%, #111827 25%, transparent 0) 0 0/12px 12px,
+    linear-gradient(#111827, #111827) 0 0/14px 14px no-repeat, linear-gradient(#111827, #111827) 100% 0/14px 14px no-repeat, linear-gradient(#111827, #111827) 0 100%/14px 14px no-repeat;
+    border: 3px solid #fff; outline: 1px solid #C3C9D2; }
+</style></head>
+<body><div class="page">
+  <div class="hdr">
+    <span id="logo"></span>
+    <div class="grow"><h1>RFI Register</h1><div style="font-size:12px;margin-top:4px">Meridian Tower · <span class="mono">C-103</span> Level 03 Coordination Plan · <span class="mono">Rev B</span></div></div>
+    <div style="text-align:right;font-size:10.5px;line-height:15px;color:#4B5563">Exported 21 Nov 2026, 10:58<br>by Priya Shah (Site lead)<br><span class="mono">Halden Construction</span></div>
+  </div>
+  <div class="sum"><div><b>4</b>Issues</div><div><b>2</b>Review complete</div><div><b>1</b>In review</div><div><b>1</b>Blocked</div></div>
+
+  <div class="rec">
+    <div class="rh"><span class="mono" style="font-weight:600">RFI-001</span><span class="t grow">Supply duct SD-3 crosses Beam B-14</span><span class="pst" style="color:#166534" id="s1"></span></div>
+    <div class="rb">
+      <div><div class="crop" id="c1"></div><div class="row" style="margin-top:6px;font-size:9.5px;color:#6B7280;gap:12px"><span><span style="display:inline-block;width:16px;border-top:2px dashed var(--redline);vertical-align:middle"></span> Accepted route v1</span><span>Crop at C–D/4, Rev B</span></div></div>
+      <div>
+        <dl class="f"><dt>Sheet / rev</dt><dd class="mono">C-103 · Rev B</dd><dt>Grid</dt><dd class="mono">C–D/4</dd><dt>Discipline</dt><dd>MEP · High</dd><dt>Raised</dt><dd>Priya Shah, 21 Nov 07:42</dd><dt>Question</dt><dd style="font-weight:400">SD-3 hits the B-14 soffit between C and D. What route can MEP and Structural both accept?</dd></dl>
+        <div class="sec">Accepted proposal · v1</div>
+        <div>Drop SD-3 150 mm and cross B-14 through existing web opening WO-2 near D/4. Rejoin the main after the beam. <span style="color:#4B5563">Cost +$1,200 est. · Schedule no change.</span></div>
+      </div>
+    </div>
+    <div style="padding:0 12px 10px">
+      <table><thead><tr><th>Reviewer</th><th>Role</th><th>Decision</th><th>Proposal</th><th>Revision</th><th>Time</th></tr></thead><tbody>
+        <tr><td><b>Marco Ruiz</b><br><span style="color:#6B7280">Northline MEP</span></td><td>MEP lead</td><td>✓ Approved</td><td class="mono">v1</td><td class="mono">Rev B</td><td class="mono">21 Nov 10:42</td></tr>
+        <tr><td><b>Dana Okafor</b><br><span style="color:#6B7280">Okafor Structural</span></td><td>Structural engineer</td><td>✓ Approved</td><td class="mono">v1</td><td class="mono">Rev B</td><td class="mono">21 Nov 10:51</td></tr>
+      </tbody></table>
+      <div class="row" style="margin-top:8px;font-size:9.5px;color:#4B5563;gap:10px"><span class="mono">Record a3f9c21e</span><span>Matches the hash shown on the pin in PinThread.</span><span class="grow"></span><span>Thread: pinthread.app/p/…/RFI-001</span></div>
+    </div>
+  </div>
+
+  <div class="rec">
+    <div class="rh"><span class="mono" style="font-weight:600">RFI-003</span><span class="t grow">Slab pour 3B: honeycombing at edge</span><span class="pst" style="color:#B42318" id="s3"></span></div>
+    <div class="rb" style="grid-template-columns:200px 1fr">
+      <div class="crop" id="c3"></div>
+      <div>
+        <dl class="f"><dt>Sheet / rev</dt><dd class="mono">C-103 · Rev B</dd><dt>Grid</dt><dd class="mono">F–G/2–3</dd><dt>Hold</dt><dd>Dana Okafor (Structural), 20 Nov 16:05: “Visible honeycombing at slab edge. Not accepting the pour as-is.”</dd><dt>To clear</dt><dd>Core test results or a repair method statement</dd></dl>
+        <div class="outst" style="margin-top:10px"><span id="s3b"></span><span>Outstanding: Site lead to post corrective evidence, then Structural to assess and clear the hold.</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ftr"><span>Generated by PinThread from the decision record. Drawing, thread and this register share one source.</span><span class="grow"></span><span class="mono">Page 1 of 2</span></div>
+</div>
+<script>
+const { glyph, crop, logo, ROUTE } = PT;
+document.getElementById('logo').innerHTML = logo(34);
+document.getElementById('s1').innerHTML = glyph('complete') + 'REVIEW COMPLETE';
+document.getElementById('s3').innerHTML = glyph('blocked') + 'BLOCKED';
+document.getElementById('s3b').innerHTML = '';
+document.getElementById('c1').innerHTML = crop({ x: 370, y: 318, w: 240, h: 132, route: ROUTE, pinId: 'RFI-001', pinStatus: 'complete' });
+document.getElementById('c3').innerHTML = crop({ x: 205, y: 620, w: 190, h: 150, pinId: 'RFI-003', pinStatus: 'blocked' });
+</script></body></html>

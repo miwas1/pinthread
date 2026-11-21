@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Workspace · desktop</title>
+<link rel="stylesheet" href="tokens.css"><link rel="stylesheet" href="ui.css">
+<script src="../../assets/meridian/sheet.js"></script><script src="mock.js"></script>
+<style>
+  .app { display: grid; grid-template-rows: var(--topbar-h) 1fr; height: 100vh; }
+  .main { display: grid; grid-template-columns: var(--rail-w) 1fr var(--panel-w); min-height: 0; }
+  .thread { flex: 1; justify-content: flex-end; overflow: hidden; }
+</style></head>
+<body><div class="app">
+  <header class="topbar">
+    <span class="logo" id="logo"></span>
+    <nav class="crumb"><span>Meridian Tower</span><span class="sep">/</span><b>C-103 Level 03 Coordination Plan</b><span class="revpill">Rev B <span id="i-chev"></span></span></nav>
+    <span class="grow"></span>
+    <span class="conn">Nexconn live</span>
+    <button class="btn btn-outline" id="b-inv"></button>
+    <button class="btn btn-outline" id="b-exp"></button>
+    <div class="me"><span id="me-av"></span><div class="who"><b>Marco Ruiz</b><span>MEP lead · Northline MEP</span></div></div>
+  </header>
+  <div class="main">
+    <!-- Issue rail -->
+    <aside class="rail">
+      <div class="ph" style="padding-bottom:12px">
+        <div class="row"><h2 class="h-title" style="font-size:16px">Issues</h2><span class="ref">4</span><span class="grow"></span><span class="tool" style="width:32px;height:32px" id="i-search"></span></div>
+        <div class="chips" style="margin-top:10px">
+          <span class="fchip on">All <span class="n">4</span></span>
+          <span class="fchip"><span class="dot review"></span>In review <span class="n">2</span></span>
+          <span class="fchip"><span class="dot blocked"></span>Blocked <span class="n">1</span></span>
+          <span class="fchip"><span class="dot complete"></span>Done <span class="n">1</span></span>
+        </div>
+        <div class="chips" style="margin-top:6px"><span class="fchip">Discipline <span id="i-d1"></span></span><span class="fchip">Severity <span id="i-d2"></span></span></div>
+      </div>
+      <div class="scroll" id="list"></div>
+    </aside>
+
+    <!-- Drawing canvas -->
+    <section class="canvas" id="canvas">
+      <div class="float" style="left:16px;top:16px"><div class="seg" id="layers"></div></div>
+      <div class="float" style="right:16px;top:16px"><div class="tracker" id="tracker"></div></div>
+      <div class="float" style="right:16px;bottom:16px"><div class="zoom" id="zoom"></div></div>
+      <div class="float" style="left:16px;bottom:16px"><button class="fab" id="fab"></button></div>
+      <div class="float" style="left:50%;bottom:22px;transform:translateX(-50%)"><span class="ref" style="background:rgba(255,255,255,.9);padding:6px 10px;border-radius:6px;border:1px solid var(--border)">C-103 · Rev B · 145%</span></div>
+    </section>
+
+    <!-- Issue room -->
+    <aside class="panel">
+      <div class="ph" style="padding:14px 16px 12px">
+        <div class="row"><span id="st"></span><span class="grow"></span><span class="tool" style="width:32px;height:32px" id="i-link"></span><span class="tool" style="width:32px;height:32px" id="i-x"></span></div>
+        <h1 class="h-title" style="margin-top:10px">Supply duct SD-3 crosses Beam B-14</h1>
+        <div class="row wrap" style="margin-top:6px;gap:6px"><span class="ref">RFI-001 · C-103 Rev B · Grid C–D/4</span><span class="tag sev-high">High</span><span class="tag mep">MEP</span></div>
+      </div>
+      <div class="brief" style="padding:12px 16px">
+        <div class="row" style="align-items:flex-start;gap:12px">
+          <div class="crop" style="width:118px;flex:none" id="brief-crop"></div>
+          <p class="q" style="margin:0;font-size:13px;line-height:19px">“SD-3 hits the B-14 soffit between C and D. Ceiling close-out is Friday. What route can MEP and Structural both accept?” <span class="faint">— Priya Shah, Site lead</span></p>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">
+          <div class="rv"><span id="rv1"></span><div><div class="nm">Marco Ruiz</div><div class="rl">MEP · approved 10:42</div></div></div>
+          <div class="rv waiting"><span id="rv2"></span><div><div class="nm">Dana Okafor</div><div class="rl" style="color:var(--review-text)">Structural · waiting 9 min</div></div></div>
+        </div>
+      </div>
+      <div class="thread" id="thread"></div>
+      <div class="composer">
+        <span class="tool" id="c-cam"></span><span class="tool lbl" id="c-prop"></span><span class="tool" id="c-hold"></span>
+        <div class="input">Message RFI-001…</div><span class="send" id="c-send"></span>
+      </div>
+    </aside>
+  </div>
+</div>
+<script>
+const { icon, chip, mountSheet, crop, photo, logo, av, ROUTE } = PT;
+document.getElementById('logo').innerHTML = logo() + 'PinThread';
+document.getElementById('i-chev').innerHTML = icon('chevdown', 'sm');
+document.getElementById('b-inv').innerHTML = icon('qr', 'sm') + 'Invite device';
+document.getElementById('b-exp').innerHTML = icon('download', 'sm') + 'Export register';
+document.getElementById('me-av').innerHTML = av('MR', 'mep');
+document.getElementById('i-search').innerHTML = icon('search', 'sm');
+['i-d1','i-d2'].forEach(id => document.getElementById(id).innerHTML = icon('chevdown', 'sm'));
+document.getElementById('i-link').innerHTML = icon('link', 'sm');
+document.getElementById('i-x').innerHTML = icon('x', 'sm');
+document.getElementById('st').innerHTML = chip('review', 'In review · Waiting for Structural', 'lg');
+document.getElementById('rv1').innerHTML = av('MR', 'mep', 'ok');
+document.getElementById('rv2').innerHTML = av('DO', 'struct', 'wait');
+document.getElementById('brief-crop').innerHTML = crop({ x: 400, y: 320, w: 165, h: 110, pinId: 'RFI-001' });
+document.getElementById('c-cam').innerHTML = icon('camera');
+document.getElementById('c-prop').innerHTML = icon('route', 'sm') + 'Proposal';
+document.getElementById('c-hold').innerHTML = icon('hold');
+document.getElementById('c-send').innerHTML = icon('send', 'sm');
+document.getElementById('fab').innerHTML = icon('plus') + 'New issue';
+document.getElementById('zoom').innerHTML = ['plus','minus','fit','target'].map(n => `<button>${icon(n)}</button>`).join('');
+document.getElementById('layers').innerHTML =
+  `<button class="on"><span class="sw" style="background:var(--layer-arch)"></span>Arch</button>
+   <button class="on"><span class="sw" style="background:var(--layer-struct)"></span>Struct</button>
+   <button class="on"><span class="sw" style="background:var(--layer-mep)"></span>MEP</button>`;
+document.getElementById('tracker').innerHTML = `
+  <div class="row"><span class="h-sec">Demo · step 2 of 4</span><span class="grow"></span><span class="faint">${icon('x','sm')}</span></div>
+  <div class="progress" style="margin-top:8px"><i style="width:37%"></i></div>
+  <div class="steps">
+    <div class="step done"><span class="n">${icon('check','sm')}</span>Propose the reroute</div>
+    <div class="step now"><span class="n">2</span>Bring in Structural on another device</div>
+    <div class="step"><span class="n">3</span>Structural approves</div>
+    <div class="step"><span class="n">4</span>Refresh and export the register</div>
+  </div>
+  <button class="btn btn-ink block" style="margin-top:12px">${icon('qr','sm')}Show QR for Dana's phone</button>`;
+
+const items = [
+  { id: 'RFI-001', st: 'review', t: 'Supply duct SD-3 crosses Beam B-14', m: 'Grid C–D/4 · MEP · High', w: 'Waiting for Structural · 9 min', sel: true, avs: [['MR','mep','ok'],['DO','struct','wait']] },
+  { id: 'RFI-002', st: 'review', t: 'Electrical riser ER-2 penetration through core wall', m: 'Grid E/7 · Elec · Medium', w: 'Waiting for Architect · 2 h', unread: 2, avs: [['MR','mep','ok'],['LP','arch','wait']] },
+  { id: 'RFI-003', st: 'blocked', t: 'Slab pour 3B: honeycombing at edge', m: 'Grid F–G/2–3 · Struct · High', w: 'Hold by Structural · needs core test results', avs: [['DO','struct'],['LP','arch']] },
+  { id: 'RFI-004', st: 'complete', t: 'Curtain wall bracket spacing at grid A', m: 'Grid A/1–3 · Arch · Low', w: 'Approved v2 · Architect, Structural', avs: [['LP','arch','ok'],['DO','struct','ok']] },
+];
+document.getElementById('list').innerHTML = `<div style="padding:12px 16px 4px" class="row"><span class="h-sec">Waiting on others</span><span class="grow"></span><span class="faint" style="font-size:12px">Longest wait first</span></div>` + items.map(i => `
+  <div class="issue ${i.sel ? 'sel' : ''}">
+    <div class="row">${chip(i.st)}<span class="ref">${i.id}</span><span class="grow"></span>${i.unread ? `<span class="unread">${i.unread}</span>` : ''}</div>
+    <div class="t">${i.t}</div><div class="m">${i.m}</div>
+    <div class="w"><span class="row" style="gap:4px">${i.avs.map(a => av(a[0], a[1], a[2], 'sm')).join('')}</span>${i.w}</div>
+  </div>`).join('');
+
+document.getElementById('thread').innerHTML = `
+  <div class="msg"><span>${av('PS','site')}</span><div class="body">
+    <div class="meta"><b>Priya Shah</b><span>Site lead · 07:42</span></div>
+    <div class="card" style="max-width:300px"><div class="photo" style="border:0;border-radius:0">${photo()}</div>
+      <div class="cb" style="padding:8px 10px;font-size:12.5px" class="muted">Field evidence · Level 03 ceiling void, looking north</div></div>
+  </div></div>
+  <div class="msg mine"><div class="body">
+    <div class="meta"><span>10:41</span><b>You</b></div>
+    <div class="card proposal">
+      <div class="ch"><span class="tag ver">v1</span><b style="font-size:13.5px">Proposal</b><span class="faint" style="font-size:12px">Rev B · current</span><span class="grow"></span><span style="color:var(--redline)">${icon('route','sm')}</span></div>
+      <div class="cb">
+        <div class="crop">${crop({ x: 372, y: 330, w: 230, h: 120, route: ROUTE, pinId: 'RFI-001' })}</div>
+        <p style="margin:10px 0 0;font-size:13px;line-height:19px">Drop SD-3 150 mm and cross B-14 through existing web opening WO-2 near D/4. Rejoin the main after the beam.</p>
+        <dl class="kv"><dt>Cost</dt><dd>+$1,200 est. (2 fittings)</dd><dt>Schedule</dt><dd>No change</dd></dl>
+      </div>
+      <div class="cf"><span class="appr ok">${av('MR','mep','ok','sm')}MEP 10:42</span><span class="appr wait">${av('DO','struct','wait','sm')}Structural waiting</span></div>
+    </div>
+  </div></div>
+  <div class="sys"><span class="line"></span>${icon('check','sm')}<span>You approved <b>v1</b> · Dana alerted in <span class="mono">#discstruct</span></span><span class="line"></span></div>`;
+
+mountSheet(document.getElementById('canvas'), {
+  cx: 505, cy: 445, zoom: 1.45, route: ROUTE,
+  pins: [
+    { id: 'RFI-001', status: 'review', sel: true, text: 'In review · Waiting for Structural' },
+    { id: 'RFI-003', status: 'blocked' },
+  ],
+});
+</script></body></html>

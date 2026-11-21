@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Proposal composer</title>
+<link rel="stylesheet" href="tokens.css"><link rel="stylesheet" href="ui.css">
+<script src="../../assets/meridian/sheet.js"></script><script src="mock.js"></script>
+<style>
+  .backdrop { position: fixed; inset: 0; }
+  .scrim { position: fixed; inset: 0; background: rgba(17, 24, 39, .45); }
+  .modal { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 1080px; height: 720px; background: var(--surface); border-radius: var(--r-xl); box-shadow: var(--e-3); display: grid; grid-template-rows: auto 1fr auto; overflow: hidden; }
+  .mh { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+  .mb { display: grid; grid-template-columns: 1fr 380px; min-height: 0; }
+  .draw { position: relative; overflow: hidden; background: var(--canvas); }
+  .form { padding: 20px; display: flex; flex-direction: column; gap: 16px; border-left: 1px solid var(--border); overflow: hidden; }
+  label.l { display: block; font-size: 12.5px; font-weight: 600; margin-bottom: 6px; }
+  .field { border: 1px solid var(--border-strong); border-radius: var(--r-md); padding: 10px 12px; font-size: 14px; line-height: 20px; background: var(--surface); }
+  .field.focus { border-color: var(--focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 18%, transparent); }
+  .hint { font-size: 12px; color: var(--text-3); margin-top: 6px; }
+  .mf { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--border); background: var(--surface-sunken); }
+  .tools { display: flex; flex-direction: column; gap: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 4px; box-shadow: var(--e-2); }
+  .tools button { width: 40px; height: 40px; border: 0; border-radius: 8px; background: transparent; display: grid; place-items: center; color: var(--text-2); }
+  .tools button.on { background: var(--redline-weak); color: var(--redline); }
+  .tools hr { border: 0; border-top: 1px solid var(--border); margin: 2px 4px; }
+  .seg2 { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--border-strong); border-radius: var(--r-md); overflow: hidden; }
+  .seg2 span { text-align: center; font-size: 12.5px; font-weight: 600; padding: 8px 0; color: var(--text-2); border-left: 1px solid var(--border); }
+  .seg2 span:first-child { border-left: 0; } .seg2 span.on { background: var(--n-900); color: #fff; }
+  .check { display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; }
+  .box { width: 18px; height: 18px; border-radius: 5px; background: var(--n-900); display: grid; place-items: center; flex: none; margin-top: 1px; }
+  .box svg { width: 12px; height: 12px; stroke: #fff; stroke-width: 3; fill: none; }
+  .note { display: flex; gap: 10px; padding: 10px 12px; border-radius: var(--r-md); background: var(--open-weak); color: var(--open-text); font-size: 12.5px; line-height: 18px; }
+</style></head>
+<body>
+<div class="backdrop canvas" id="bg"></div><div class="scrim"></div>
+<div class="modal">
+  <div class="mh">
+    <span style="color:var(--redline)" id="i-route"></span>
+    <div class="grow"><div style="font-weight:600;font-size:16px">New proposal for RFI-001</div><div class="ref" style="margin-top:4px">Supply duct SD-3 crosses Beam B-14 · C-103 Rev B · Grid C–D/4</div></div>
+    <span class="tag ver">Will be v1</span><span class="tool" id="i-x"></span>
+  </div>
+  <div class="mb">
+    <div class="draw" id="draw">
+      <div class="float" style="left:16px;top:16px"><div class="tools" id="tools"></div></div>
+      <div class="float" style="left:50%;bottom:16px;transform:translateX(-50%)"><div class="row" style="background:var(--n-900);color:#fff;border-radius:var(--r-pill);padding:8px 14px;font-size:12.5px;gap:12px;box-shadow:var(--e-3);white-space:nowrap"><span>Tap to add a point</span><span style="opacity:.5">·</span><span>Drag to adjust</span><span style="opacity:.5">·</span><span>Double-tap to finish</span><span class="mono" style="opacity:.7">6 pts</span></div></div>
+      <div class="float" style="right:16px;top:16px"><div class="seg" id="layers"></div></div>
+    </div>
+    <div class="form">
+      <div><label class="l">What is the fix?</label><div class="field focus" style="min-height:96px">Drop SD-3 150 mm and cross B-14 through existing web opening WO-2 near D/4. Rejoin the main after the beam.<span style="border-left:1.5px solid var(--focus);margin-left:1px"></span></div><div class="hint">Shown on the card and in the register. 280 characters max.</div></div>
+      <div><label class="l">Cost impact</label><div class="field">+$1,200 est. (2 fittings)</div></div>
+      <div><label class="l">Schedule impact</label><div class="seg2"><span class="on">None</span><span>&lt; 1 day</span><span>1–3 days</span><span>&gt; 3 days</span></div></div>
+      <div><label class="l">Needs approval from</label><div class="row" style="gap:8px"><span class="appr ok" id="r1"></span><span class="appr wait" id="r2"></span></div></div>
+      <div class="check"><span class="box"><svg viewBox="0 0 12 12"><path d="M2.5 6.2l2.3 2.3 4.7-5"/></svg></span><span>Approve for <b>MEP</b> when I post<div class="hint" style="margin-top:2px">You can withdraw before Structural decides.</div></span></div>
+      <div class="note"><span id="i-info"></span><span>Dana Okafor gets a <b>Jump to pin</b> alert in <span class="mono">#discstruct</span> and sees this route on Rev B.</span></div>
+    </div>
+  </div>
+  <div class="mf"><span class="faint" style="font-size:12.5px">Route drawn on <span class="mono">C-103 Rev B</span>. A later edit creates v2 and asks everyone to approve again.</span><span class="grow"></span><button class="btn btn-ghost lg">Cancel</button><button class="btn btn-ink lg">Post proposal</button></div>
+</div>
+<script>
+const { icon, mountSheet, av, ROUTE } = PT;
+document.getElementById('i-route').innerHTML = icon('route', 'lg');
+document.getElementById('i-x').innerHTML = icon('x');
+document.getElementById('i-info').innerHTML = icon('info', 'sm');
+document.getElementById('r1').innerHTML = av('MR','mep','ok','sm') + 'MEP · you';
+document.getElementById('r2').innerHTML = av('DO','struct','wait','sm') + 'Structural · Dana Okafor';
+document.getElementById('tools').innerHTML = `<button class="on" title="Route">${icon('route')}</button><button title="Note">${icon('type')}</button><button title="Freehand">${icon('pencil')}</button><hr><button title="Undo">${icon('undo')}</button><button title="Clear">${icon('x')}</button>`;
+document.getElementById('layers').innerHTML = `<button class="on"><span class="sw" style="background:var(--layer-arch)"></span>Arch</button><button class="on"><span class="sw" style="background:var(--layer-struct)"></span>Struct</button><button class="on"><span class="sw" style="background:var(--layer-mep)"></span>MEP</button>`;
+mountSheet(document.getElementById('bg'), { cx: 560, cy: 470, zoom: 1.2, pins: [{ id: 'RFI-001', status: 'review', label: false }, { id: 'RFI-003', status: 'blocked', label: false }] });
+mountSheet(document.getElementById('draw'), { cx: 486, cy: 392, zoom: 3.1, route: ROUTE, routeOpts: { handles: true }, pins: [{ id: 'RFI-001', status: 'open', label: false }] });
+</script></body></html>

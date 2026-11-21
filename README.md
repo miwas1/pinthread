@@ -6,3 +6,6 @@ A pin on a drawing opens a Nexconn conversation with the drawing crop, the propo
 
 - Product concept: [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md)
 - Build plan: [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)
+- UI design: [`docs/UI_DESIGN.md`](docs/UI_DESIGN.md) (mockups in [`design/screens/`](design/screens))
+
+![Workspace mockup](design/screens/02-workspace-desktop.png)

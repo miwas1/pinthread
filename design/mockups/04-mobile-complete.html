@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Mobile · review complete</title>
+<link rel="stylesheet" href="tokens.css"><link rel="stylesheet" href="ui.css">
+<script src="../../assets/meridian/sheet.js"></script><script src="mock.js"></script>
+<style>
+  body { font-size: var(--text-lg); line-height: var(--lh-lg); }
+  .canvas { position: absolute; top: 96px; left: 0; right: 0; bottom: 0; }
+  .bsheet { height: 560px; }
+  .content { flex: 1; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; gap: 12px; padding: 12px 16px; background: var(--bg); }
+  .ap { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--n-100); }
+  .ap:first-child { border-top: 0; }
+</style></head>
+<body><div class="phone">
+  <div class="statusbar"><span>10:51</span><span style="font-size:12px;letter-spacing:1px">●●● 5G ▮▮▮</span></div>
+  <div class="mtop">
+    <span id="logo"></span><span class="revpill">C-103 · Rev B</span><span class="grow"></span>
+    <span class="conn" style="height:26px;padding:0 9px">Live</span><span id="me"></span>
+  </div>
+  <section class="canvas" id="canvas">
+    <div class="float" style="left:12px;right:12px;top:10px"><div class="toast" id="toast"></div></div>
+  </section>
+  <div class="bsheet">
+    <div class="grab"></div>
+    <div style="padding:4px 16px 12px;border-bottom:1px solid var(--border)">
+      <div class="row"><span id="st"></span><span class="grow"></span><span class="ref">RFI-001</span></div>
+      <h1 class="h-title" style="margin-top:8px;font-size:18px">Supply duct SD-3 crosses Beam B-14</h1>
+      <div class="ref" style="margin-top:6px">C-103 Rev B · Grid C–D/4 · closed in 3 h 09 min</div>
+    </div>
+    <div class="content" id="content"></div>
+    <div class="composer" style="padding:8px 12px"><span class="tool" id="c-cam"></span><div class="input" style="min-height:40px;font-size:15px">Message…</div><span class="send" id="c-send"></span></div>
+    <div class="homebar"><i></i></div>
+  </div>
+</div>
+<script>
+const { icon, chip, mountSheet, logo, av, ROUTE } = PT;
+document.getElementById('logo').innerHTML = logo(26);
+document.getElementById('me').innerHTML = av('DO', 'struct');
+document.getElementById('st').innerHTML = chip('complete');
+document.getElementById('c-cam').innerHTML = icon('camera');
+document.getElementById('c-send').innerHTML = icon('send', 'sm');
+document.getElementById('toast').innerHTML = `<span class="ok">${icon('check','sm')}</span><span class="grow"><b>Approved.</b> RFI-001 is green for everyone.</span><span style="opacity:.7;font-size:12px">Undo? No</span>`;
+document.getElementById('toast').lastElementChild.remove();
+document.getElementById('content').innerHTML = `
+  <div class="sys"><span class="line"></span><span>Dana Okafor approved <b>v1</b> for Structural · 10:51</span><span class="line"></span></div>
+  <div class="card decision">
+    <div class="ch"><span style="display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--complete);color:#fff">${icon('check','sm')}</span><b style="font-size:14px">Review complete</b><span class="grow"></span><span class="ref" style="color:var(--complete-text)">10:51</span></div>
+    <div class="cb" style="padding:4px 12px 8px">
+      <div style="font-size:13px;color:var(--text-2);padding:6px 0 2px">2 of 2 required approvals on <b style="color:var(--text)">Proposal v1</b> · <span class="mono">Rev B</span></div>
+      <div class="ap">${av('MR','mep','ok')}<div class="grow"><div style="font-weight:600;font-size:14px">Marco Ruiz</div><div style="font-size:12px;color:var(--text-3)">MEP lead · Northline MEP</div></div><span class="ref">10:42</span></div>
+      <div class="ap">${av('DO','struct','ok')}<div class="grow"><div style="font-weight:600;font-size:14px">Dana Okafor <span class="faint" style="font-weight:400">(you)</span></div><div style="font-size:12px;color:var(--text-3)">Structural · Okafor Structural</div></div><span class="ref">10:51</span></div>
+    </div>
+    <div class="cf"><span class="ref">${icon('hash','sm')}</span><span class="ref">Record a3f9c21e</span><span class="grow"></span><button class="btn btn-outline sm">${icon('file','sm')}Register</button></div>
+  </div>`;
+mountSheet(document.getElementById('canvas'), {
+  cx: 486, cy: 381 + (374 - 130) / 1.35, zoom: 1.35, route: ROUTE,
+  pins: [{ id: 'RFI-001', status: 'complete', sel: true, pulse: true }],
+});
+</script></body></html>
