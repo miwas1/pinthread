@@ -1,4 +1,4 @@
-# Render Blueprint: PinThread web service (Docker) + Postgres, both in Frankfurt.
+# Render Blueprint: PinThread web service (Docker) + Postgres, both in Frankfurt (free plans; Render deletes free databases after 30 days).
 # Nexconn credentials are marked sync:false so they are entered in the Render dashboard, never committed.
 services:
   - type: web
@@ -35,7 +35,7 @@ services:
 
 databases:
   - name: pinthread-db
-    plan: basic-256mb
+    plan: free
     region: frankfurt
     postgresMajorVersion: "16"
     databaseName: pinthread
