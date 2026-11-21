@@ -64,6 +64,9 @@ async function main() {
   await purgeMismatchedPool();
   // Give an outgoing instance (zero-downtime deploy) time to stop before building new demo projects.
   setTimeout(() => void ensurePool(), config.isProd ? 45_000 : 0).unref();
+  // An outgoing instance (older code) may have written rows the new schema expects to be filled in; the migration is
+  // idempotent, so run it again once that instance has stopped.
+  if (config.isProd) setTimeout(() => void migrate().catch(e => log.error('migrate.again', { error: String(e) })), 120_000).unref();
   setInterval(() => void ensurePool(), 30_000).unref();
   setInterval(() => void cleanupExpired().catch(e => log.error('cleanup', { error: String(e) })), 3600_000).unref();
   setInterval(() => void cleanupOrphanFiles().catch(e => log.error('cleanup.files', { error: String(e) })), 3600_000).unref();

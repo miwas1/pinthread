@@ -118,7 +118,9 @@ insert into sheets (id, project_id, number, title, revision, source)
   where p.sheet_number is not null and not exists (select 1 from sheets s where s.project_id = p.id);
 insert into sheet_revisions (sheet_id, revision)
   select s.id, s.revision from sheets s where not exists (select 1 from sheet_revisions r where r.sheet_id = s.id);
-update pins set sheet_id = 's' || project_id where sheet_id is null;
+-- Pins without a sheet (made before sheets existed, or by an older instance during a deploy) go on the project's first sheet.
+update pins p set sheet_id = (select s.id from sheets s where s.project_id = p.project_id order by s.ord, s.created_at limit 1)
+  where p.sheet_id is null;
 create index if not exists pins_sheet on pins (sheet_id);
 
 -- A Nexconn community holds at most 50 subchannels (5 fixed + one per pin), so large projects add overflow communities.
