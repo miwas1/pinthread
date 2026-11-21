@@ -103,6 +103,7 @@ export async function createPin(projectId: string, actorId: string, input: Creat
     for (const [i, uid] of reviewerIds.entries()) await t`insert into pin_reviewers (pin_id, user_id, ord) values (${pinId}, ${uid}, ${i})`;
 
     const { d, state, seq } = await commitState(t, pinId);
+    await pinStateCard(t, d, state, seq); // first: pin colours update on every screen before the cards follow
     const actor = actorOf(d, actorId);
     await enqueue(t, projectId, `${projectId}:room:${pinId}`, {
       kind: 'subchannel', communityId: project.community_id, subchannelId: d.pin.subchannel_id, isPrivate: true, members: pinMemberIds(d), pinId,
@@ -114,7 +115,6 @@ export async function createPin(projectId: string, actorId: string, input: Creat
     };
     await card(t, d, `brief:${pinId}`, BOT_USER_ID, MT.brief, brief, { counted: false });
     await jumps(t, d, seq, reviewers, actor, p => `${actor.name} needs ${ROLE_INFO[p.role].label} on ${rfiNumber(d.pin.number)}: ${d.pin.title}`, `create:${pinId}`);
-    await pinStateCard(t, d, state, seq);
     await logEvent(t, d, 'pin.created', actorId, { reviewerIds });
   });
   kickDispatcher();
@@ -146,6 +146,7 @@ export async function postProposal(pinId: string, actorId: string, input: Propos
       await t`insert into signoffs (id, pin_id, proposal_id, reviewer_id, revision, verdict) values (${signoffId}, ${pinId}, ${proposalId}, ${actorId}, ${d0.project.revision}, 'approve')`;
     }
     const { d, state, seq } = await commitState(t, pinId);
+    await pinStateCard(t, d, state, seq); // first: pin colours update on every screen before the cards follow
     const now = new Date().toISOString();
     if (prev) {
       await enqueue(t, d.project.id, `${d.project.id}:meta:${prev.id}:superseded`, {
@@ -167,7 +168,6 @@ export async function postProposal(pinId: string, actorId: string, input: Propos
     if (state.status === 'complete') await decisionCard(t, d, state, seq, `${pinId}:${seq}`);
     await jumps(t, d, seq, state.status === 'review' ? state.waitingFor : [], actor,
       p => `${actor.name} needs ${ROLE_INFO[p.role].label} on ${rfiNumber(d.pin.number)}: proposal v${version}`, `proposal:${proposalId}`);
-    await pinStateCard(t, d, state, seq);
     await logEvent(t, d, 'proposal.posted', actorId, { proposalId, version, approveOwn: approved });
   });
   kickDispatcher();
@@ -200,6 +200,7 @@ export async function signoff(pinId: string, actorId: string, input: SignoffInpu
         values (${signoffId}, ${pinId}, ${cur.id}, ${actorId}, ${d0.project.revision}, ${input.verdict}, ${input.comment})`;
     }
     const { d, state, seq } = await commitState(t, pinId);
+    await pinStateCard(t, d, state, seq); // first: pin colours update on every screen before the cards follow
     const now = new Date().toISOString();
     const so: SignoffContent = { ...base(d, seq), signoffId, proposalId: cur.id, version: cur.version, revision: d.project.revision, verdict: input.verdict, comment: input.comment, reviewer: who(actor) };
     await card(t, d, `signoff:${signoffId}:${input.verdict}:${seq}`, actorId, MT.signoff, so, {
@@ -214,7 +215,6 @@ export async function signoff(pinId: string, actorId: string, input: SignoffInpu
       const author = person(d.people.get(cur.author_id)!);
       await jumps(t, d, seq, [author], actor, () => `${actor.name} requested a change on ${rfiNumber(d.pin.number)} v${cur.version}`, `rc:${signoffId}:${seq}`);
     }
-    await pinStateCard(t, d, state, seq);
     await logEvent(t, d, `signoff.${input.verdict}`, actorId, { proposalId: cur.id, version: cur.version });
   });
   if (!duplicate) kickDispatcher();
@@ -233,12 +233,12 @@ export async function placeHold(pinId: string, actorId: string, input: { reason:
       await t`update signoffs set verdict = 'withdrawn', updated_at = now() where proposal_id = ${d0.pin.current_proposal_id} and reviewer_id = ${actorId} and verdict = 'approve'`;
     }
     const { d, state, seq } = await commitState(t, pinId);
+    await pinStateCard(t, d, state, seq); // first: pin colours update on every screen before the cards follow
     const content: HoldContent = { ...base(d, seq), holdId, action: 'placed', reason: input.reason, clearCondition: input.clearCondition, actor: who(actor), note: null };
     await card(t, d, `hold:${holdId}:placed`, actorId, MT.hold, content, { pushContent: `${actor.name} placed a hold on ${rfiNumber(d.pin.number)}` });
     await decisionCard(t, d, state, seq, `${pinId}:${seq}`);
     const site = [...d.people.values()].filter(u => u.role === 'site').map(person);
     await jumps(t, d, seq, site, actor, () => `${actor.name} placed a hold on ${rfiNumber(d.pin.number)}: ${input.clearCondition}`, `hold:${holdId}`);
-    await pinStateCard(t, d, state, seq);
     await logEvent(t, d, 'hold.placed', actorId, { holdId });
   });
   kickDispatcher();
@@ -255,13 +255,13 @@ export async function addEvidence(pinId: string, actorId: string, input: { holdI
     await t`insert into evidence (id, pin_id, hold_id, author_id, image_url, caption, message_id)
       values (${evidenceId}, ${pinId}, ${input.holdId}, ${actorId}, ${input.imageUrl}, ${input.caption}, ${input.messageId})`;
     const { d, state, seq } = await commitState(t, pinId);
+    await pinStateCard(t, d, state, seq); // first: pin colours update on every screen before the cards follow
     if (hold) {
       const content: HoldContent = { ...base(d, seq), holdId: hold.id, action: 'evidence_added', reason: hold.reason, clearCondition: hold.clear_condition, actor: who(actor), note: input.caption };
       await card(t, d, `hold:${hold.id}:evidence:${evidenceId}`, actorId, MT.hold, content);
       const placer = person(d.people.get(hold.placed_by)!);
       await jumps(t, d, seq, [placer], actor, () => `${actor.name} posted corrective evidence on ${rfiNumber(d.pin.number)}. Assess and clear the hold.`, `evidence:${evidenceId}`);
     }
-    await pinStateCard(t, d, state, seq);
     await logEvent(t, d, 'evidence.added', actorId, { evidenceId, holdId: input.holdId });
   });
   kickDispatcher();
@@ -277,13 +277,13 @@ export async function clearHold(pinId: string, holdId: string, actorId: string, 
     if (actorId !== hold.placed_by && actor.role !== placer.role) throw new HttpError(403, 'forbidden', `Only ${roleList([placer.role as Role])} can clear this hold.`);
     await t`update holds set status = 'cleared', cleared_by = ${actorId}, cleared_at = now(), note = ${note} where id = ${holdId}`;
     const { d, state, seq } = await commitState(t, pinId);
+    await pinStateCard(t, d, state, seq); // first: pin colours update on every screen before the cards follow
     const content: HoldContent = { ...base(d, seq), holdId, action: 'cleared', reason: hold.reason, clearCondition: hold.clear_condition, actor: who(actor), note };
     await card(t, d, `hold:${holdId}:cleared`, actorId, MT.hold, content, { pushContent: `${actor.name} cleared the hold on ${rfiNumber(d.pin.number)}` });
     await decisionCard(t, d, state, seq, `${pinId}:${seq}`);
     if (state.status === 'review') {
       await jumps(t, d, seq, state.waitingFor, actor, p => `Hold cleared on ${rfiNumber(d.pin.number)}. ${ROLE_INFO[p.role].label} review needed.`, `clear:${holdId}`);
     }
-    await pinStateCard(t, d, state, seq);
     await logEvent(t, d, 'hold.cleared', actorId, { holdId });
   });
   kickDispatcher();
