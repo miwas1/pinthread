@@ -19,7 +19,13 @@ const AREA_DOMAINS: Record<string, [string, string]> = {
   SAU: ['api.sau-light-api.com', 'api-b.sau-light-api.com'],
 };
 
-const area = (env.NEXCONN_AREA ?? 'SG').toUpperCase() as 'SG' | 'NA' | 'SAU';
+// Accept both naming styles: NEXCONN_API_PRIMARY/BACKUP and NEXCONN_PRIMARY_API_DOMAIN/SECONDARY_API_DOMAIN (Go SDK style).
+const host = (v?: string) => (v ? v.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '') : undefined);
+const primaryDomain = host(env.NEXCONN_API_PRIMARY ?? env.NEXCONN_PRIMARY_API_DOMAIN);
+const backupDomain = host(env.NEXCONN_API_BACKUP ?? env.NEXCONN_SECONDARY_API_DOMAIN);
+// The client SDK needs the data centre too; infer it from the API domain when NEXCONN_AREA is not set.
+const inferredArea = primaryDomain?.includes('us-light-api') ? 'NA' : primaryDomain?.includes('sau-light-api') ? 'SAU' : 'SG';
+const area = (env.NEXCONN_AREA || inferredArea).toUpperCase() as 'SG' | 'NA' | 'SAU';
 const appKey = env.NEXCONN_APP_KEY ?? '';
 const appSecret = env.NEXCONN_APP_SECRET ?? '';
 const chatMode = (env.CHAT_MODE as 'nexconn' | 'local' | undefined) ?? (appKey && appSecret ? 'nexconn' : 'local');
@@ -30,7 +36,7 @@ export const config = {
   port: Number(env.PORT ?? 8787),
   databaseUrl: env.DATABASE_URL ?? 'postgres://pinthread:pinthread@localhost:5432/pinthread',
   /** Absolute origin used in links and image URLs sent through Nexconn. Empty means relative URLs (local mode). */
-  publicUrl: (env.PUBLIC_URL ?? '').replace(/\/$/, ''),
+  publicUrl: (env.PUBLIC_URL ?? env.RENDER_EXTERNAL_URL ?? '').replace(/\/$/, ''),
   sessionSecret: secret('SESSION_SECRET'),
   inviteSecret: secret('INVITE_SECRET'),
   adminKey: env.ADMIN_KEY ?? (isProd ? '' : 'dev-admin'),
@@ -39,7 +45,7 @@ export const config = {
     appKey,
     appSecret,
     area,
-    domains: [env.NEXCONN_API_PRIMARY ?? AREA_DOMAINS[area][0], env.NEXCONN_API_BACKUP ?? AREA_DOMAINS[area][1]] as [string, string],
+    domains: [primaryDomain ?? AREA_DOMAINS[area][0], backupDomain ?? (primaryDomain ? primaryDomain : AREA_DOMAINS[area][1])] as [string, string],
   },
   poolSize: Number(env.DEMO_POOL_SIZE ?? (isProd ? 5 : 2)),
   demoTtlHours: Number(env.DEMO_TTL_HOURS ?? 48),

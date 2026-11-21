@@ -1,0 +1,42 @@
+# Render Blueprint: PinThread web service (Docker) + Postgres, both in Frankfurt.
+# Nexconn credentials are marked sync:false so they are entered in the Render dashboard, never committed.
+services:
+  - type: web
+    name: pinthread
+    runtime: docker
+    plan: free
+    region: frankfurt
+    branch: claude/clever-galileo-du5orv
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/healthz
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: pinthread-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: INVITE_SECRET
+        generateValue: true
+      - key: ADMIN_KEY
+        generateValue: true
+      - key: NEXCONN_APP_KEY
+        sync: false
+      - key: NEXCONN_APP_SECRET
+        sync: false
+      - key: NEXCONN_PRIMARY_API_DOMAIN
+        sync: false
+      - key: NEXCONN_SECONDARY_API_DOMAIN
+        sync: false
+      - key: DEMO_POOL_SIZE
+        value: "3"
+
+databases:
+  - name: pinthread-db
+    plan: basic-256mb
+    region: frankfurt
+    postgresMajorVersion: "16"
+    databaseName: pinthread
+    user: pinthread
