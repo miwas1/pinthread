@@ -6,6 +6,7 @@ A site lead drops a pin where a supply duct crosses Beam B-14. The pin opens a N
 
 ![Workspace](design/screens/02-workspace-desktop.png)
 
+- **Live demo:** https://pinthread-d1ya.onrender.com (real Nexconn Chat, North America data centre)
 - **Track:** Workplace & Collaboration (Nexconn Build Challenge 2026)
 - **Product concept:** [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md) · **Build plan:** [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) · **UI design:** [`docs/UI_DESIGN.md`](docs/UI_DESIGN.md)
 
