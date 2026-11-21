@@ -3,6 +3,7 @@
 // card is never sent before its room exists) and is retried with backoff.
 import { EventEmitter } from 'node:events';
 import { gateway, type SendSpec } from './chat/gateway';
+import { config } from './config';
 import { sql, type Q } from './db';
 import { log } from './log';
 
@@ -55,21 +56,27 @@ export async function dispatchOnce(onlyProject?: string): Promise<number> {
   try {
     do {
       again = false;
-      const rows = onlyProject
-        ? await sql`select * from outbox where sent_at is null and project_id = ${onlyProject} and next_attempt_at <= now() order by id limit 200`
-        : await sql`select * from outbox where sent_at is null and next_attempt_at <= now() order by id limit 200`;
+      // Claim rows atomically (safe with two instances during a zero-downtime deploy) and only for projects
+      // seeded in this server's chat mode, so a local-mode instance never delivers Nexconn work or vice versa.
+      const rows = (await sql`update outbox set locked_until = now() + interval '60 seconds'
+        where id in (
+          select o.id from outbox o join projects p on p.id = o.project_id
+          where o.sent_at is null and o.next_attempt_at <= now() and (o.locked_until is null or o.locked_until < now())
+            and p.chat_mode = ${config.chatMode} ${onlyProject ? sql`and o.project_id = ${onlyProject}` : sql``}
+          order by o.id limit 200 for update of o skip locked)
+        returning *`).sort((a, b) => Number(a.id) - Number(b.id));
       const blocked = new Set<string>();
       for (const r of rows) {
-        if (blocked.has(r.project_id)) continue;
+        if (blocked.has(r.project_id)) { await sql`update outbox set locked_until = null where id = ${r.id}`; continue; }
         try {
           const result = await handle(r.payload as OutboxItem);
-          await sql`update outbox set sent_at = now(), attempts = attempts + 1, result = ${sql.json((result ?? null) as never)}, last_error = null where id = ${r.id}`;
+          await sql`update outbox set sent_at = now(), attempts = attempts + 1, result = ${sql.json((result ?? null) as never)}, last_error = null, locked_until = null where id = ${r.id}`;
           delivered++;
           bus.emit('delivered', r);
         } catch (e) {
           blocked.add(r.project_id);
           const backoff = Math.min(60, 2 ** Math.min(r.attempts, 6));
-          await sql`update outbox set attempts = attempts + 1, last_error = ${String(e).slice(0, 500)},
+          await sql`update outbox set attempts = attempts + 1, last_error = ${String(e).slice(0, 500)}, locked_until = null,
             next_attempt_at = now() + make_interval(secs => ${backoff}) where id = ${r.id}`;
           log.warn('outbox.retry', { id: r.id, kind: r.kind, attempts: r.attempts + 1, error: String(e) });
         }

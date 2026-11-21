@@ -59,7 +59,8 @@ async function main() {
     appKeySet: !!config.nexconn.appKey, appSecretSet: !!config.nexconn.appSecret, publicUrl: config.publicUrl || null,
   }));
   await purgeMismatchedPool();
-  void ensurePool();
+  // Give an outgoing instance (zero-downtime deploy) time to stop before building new demo projects.
+  setTimeout(() => void ensurePool(), config.isProd ? 45_000 : 0).unref();
   setInterval(() => void ensurePool(), 30_000).unref();
   setInterval(() => void cleanupExpired().catch(e => log.error('cleanup', { error: String(e) })), 3600_000).unref();
 }

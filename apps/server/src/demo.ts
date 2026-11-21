@@ -142,7 +142,9 @@ export async function claimDemoProject(): Promise<string> {
 
 /** Pre-built projects from another chat mode (e.g. local before Nexconn keys were set) must never be handed out. */
 export async function purgeMismatchedPool() {
-  const rows = await sql<{ id: string }[]>`delete from projects where kind = 'demo' and claimed_at is null and chat_mode <> ${config.chatMode} returning id`;
+  const rows = await sql<{ id: string }[]>`delete from projects p where kind = 'demo' and claimed_at is null and (chat_mode <> ${config.chatMode}
+    or (${config.chatMode} = 'nexconn' and exists (select 1 from local_messages m where m.community_id = p.community_id))) returning id`;
+  if (config.chatMode === 'nexconn') await sql`delete from local_messages m where exists (select 1 from projects p where p.community_id = m.community_id and p.chat_mode = 'nexconn')`;
   for (const r of rows) await sql`delete from outbox where project_id = ${r.id}`;
   if (rows.length) log.info('demo.pool.purged', { removed: rows.length, chatMode: config.chatMode });
 }

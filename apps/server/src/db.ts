@@ -63,6 +63,7 @@ create table if not exists outbox (
   payload jsonb not null, attempts int not null default 0, next_attempt_at timestamptz not null default now(),
   sent_at timestamptz, result jsonb, last_error text, created_at timestamptz not null default now());
 create index if not exists outbox_pending on outbox (id) where sent_at is null;
+alter table outbox add column if not exists locked_until timestamptz;
 create table if not exists idempotency (
   key text not null, user_id text not null, response jsonb not null, created_at timestamptz not null default now(),
   primary key (key, user_id));
