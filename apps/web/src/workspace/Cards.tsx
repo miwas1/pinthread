@@ -159,7 +159,7 @@ function DecisionCard({ m, ctx }: { m: ChatMessage; ctx: ThreadCtx }) {
         <div className="muted" style={{ paddingBottom: 4 }}>{c.approvals.length} of {c.approvals.length} required approvals on <b style={{ color: 'var(--text)' }}>Proposal v{c.version}</b> · <span className="mono">Rev {c.revision}</span></div>
         {c.approvals.map((a: { name: string; role: string; at: string }) => {
           const p = [...ctx.people.values()].find(x => x.name === a.name);
-          return <div key={a.name} className="ap"><Avatar p={p} mark="ok" /><div className="grow"><b>{a.name}{p?.userId === ctx.meId ? <span className="faint" style={{ fontWeight: 400 }}> (you)</span> : null}</b><div className="faint">{ROLE_INFO[a.role as keyof typeof ROLE_INFO]?.title} · {p?.firm}</div></div><span className="ref">{clock(a.at)}</span></div>;
+          return <div key={a.name} className="ap"><Avatar p={p} mark="ok" /><div className="grow"><b>{a.name}{p?.userId === ctx.meId ? <span className="faint" style={{ fontWeight: 400 }}> (you)</span> : null}</b><div className="faint">{ROLE_INFO[a.role as keyof typeof ROLE_INFO]?.title}{p?.firm ? ` · ${p.firm}` : ''}</div></div><span className="ref">{clock(a.at)}</span></div>;
         })}
       </div>
       <div className="cf"><Icon name="hash" size="sm" /><span className="ref">Record {c.recordHash}</span><span className="grow" /><button className="btn btn-outline sm" onClick={ctx.onRegister}><Icon name="file" size="sm" />Register</button></div>

@@ -40,7 +40,7 @@ export function Join({ projectId, role }: { projectId: string; role: string }) {
         ) : (
           <>
             <p className="muted" style={{ marginTop: 18, marginBottom: 6 }}>You're joining <b style={{ color: 'var(--text)' }}>{info.project}</b> as</p>
-            <div className="row" style={{ gap: 12 }}><Avatar p={{ initials: info.person.initials, role: r, name: info.person.name }} size="lg" /><div><b style={{ fontSize: 17 }}>{info.person.name}</b><div className="faint">{ROLE_INFO[r]?.title} · {info.person.firm}</div></div></div>
+            <div className="row" style={{ gap: 12 }}><Avatar p={{ initials: info.person.initials, role: r, name: info.person.name }} size="lg" /><div><b style={{ fontSize: 17 }}>{info.person.name}</b><div className="faint">{ROLE_INFO[r]?.title}{info.person.firm ? ` · ${info.person.firm}` : ''}</div></div></div>
             <p className="small muted" style={{ margin: '14px 0 18px' }}>{r === 'struct' ? "Marco has proposed a new duct route across Beam B-14. You'll land on the same spot on C-103 Rev B to review it." : 'You will see the same drawing and issues, live.'}</p>
             <button className="btn btn-ink xl block" onClick={join} disabled={busy}>{busy ? <><Spinner />Joining…</> : `Join as ${info.person.name.split(' ')[0]}`}</button>
           </>

@@ -186,7 +186,7 @@ export function InviteModal({ session, state, onClose }: { session: SessionRespo
         <div className="qr"><QRCodeSVG value={link} size={208} marginSize={2} /></div>
         <div className="col" style={{ gap: 12, minWidth: 0 }}>
           <div className="seg2" style={{ gridTemplateColumns: `repeat(${roles.length},1fr)` }}>{roles.map(r => <button key={r} className={r === role ? 'on' : ''} onClick={() => setRole(r)}>{ROLE_INFO[r].label}</button>)}</div>
-          <div className="row" style={{ gap: 10 }}><Avatar p={person} size="lg" /><div><b>{person?.name}</b><div className="faint small">{ROLE_INFO[role].title} · {person?.firm}</div></div></div>
+          <div className="row" style={{ gap: 10 }}><Avatar p={person} size="lg" /><div><b>{person?.name}</b><div className="faint small">{ROLE_INFO[role].title}{person?.firm ? ` · ${person.firm}` : ''}</div></div></div>
           <p className="small muted" style={{ margin: 0 }}>Scan with your phone to act as {person?.name}. You'll land on {role === 'struct' ? 'the beam clash, ready to review' : 'the project'}.</p>
           <div className={`presence ${person?.connected ? 'on' : ''}`}>{person?.connected ? <><Icon name="check" size="sm" />{person.name.split(' ')[0]} is connected</> : <><Spinner />Waiting for {person?.name.split(' ')[0]} to connect…</>}</div>
           <div className="row wrap" style={{ gap: 8 }}>
