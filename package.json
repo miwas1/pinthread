@@ -1,0 +1,18 @@
+{
+  "name": "pinthread",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Construction drawing reviews, threaded at the spot where the clash was found. Built on Nexconn Chat.",
+  "license": "MIT",
+  "packageManager": "pnpm@10.28.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter ./apps/* dev",
+    "build": "pnpm --filter @pinthread/web build && pnpm --filter @pinthread/server build",
+    "start": "node apps/server/dist/server.mjs",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "e2e": "node e2e/hero.cjs",
+    "sheet": "node assets/meridian/build-sheet.mjs"
+  }
+}

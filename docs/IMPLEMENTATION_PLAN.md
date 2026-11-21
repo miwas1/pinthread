@@ -4,6 +4,37 @@ Companion to [`PRODUCT_SPEC.md`](./PRODUCT_SPEC.md). That document says *what* P
 
 > **Sources.** The challenge facts come from the Reskilll challenge page (reskilll.com/hack/nexconn). Nexconn behaviour was verified on 2026-11-21 against docs.nexconn.ai, the published **`@nexconn/chat` 26.5.1 / `@nexconn/engine` 26.5.1** type definitions, and the OpenAPI spec bundled with **`nexconn-server-sdk-go` v0.1.2**. The few behaviours only a live test can settle are listed in §4.9 and covered by the first build phase.
 
+## Implementation status (2026-11-21)
+
+**Built and tested:**
+- **All P0 scope:** the two-device hero flow, drawing viewer, rooms, proposals with redlines and versions, idempotent sign-offs, live pin status, Jump to pin alerts, refresh consistency, the PDF register, the demo pool, and the Docker image.
+- **From P1:** hold → evidence → clear-hold, raise a new RFI, status and discipline filters, "Waiting on you", guided tracker, QR invite, Nexconn activity drawer, role switcher, kicked-device modal, polling fallback, the `user:connection_status` webhook, and `/api/admin/metrics`.
+
+**Tests:**
+- 15 unit tests (shared package)
+- 6 API integration tests against Postgres
+- 7 Nexconn request-signing tests
+- 2 Playwright end-to-end flows (`e2e/hero.cjs`, `e2e/slab.cjs`), run against the dev server, the production bundle and the Docker image
+
+**Not built yet:**
+- Pilot mode UI (sheet upload, pilot invites, feedback prompt)
+- Severity filter
+- Nudge button (the API exists)
+- Reactions
+- Per-record QR codes in the PDF
+- Translation
+
+**Deviations from this plan:**
+- Plain CSS on the design tokens instead of Tailwind
+- Playwright scripts instead of `@playwright/test`
+
+**Needs Nexconn credentials to verify live:**
+- The browser `NexconnChatClient` (typechecked against the real SDK types)
+- The server gateway against a real app (request format covered by tests)
+- The §4.9 walking-skeleton checks
+
+The app runs in local chat mode until `NEXCONN_APP_KEY` and `NEXCONN_APP_SECRET` are set.
+
 ---
 
 ## 0. Challenge facts that shape the plan

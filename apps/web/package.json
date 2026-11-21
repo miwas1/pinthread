@@ -1,0 +1,33 @@
+{
+  "name": "@pinthread/web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p .",
+    "test": "echo 'web: covered by e2e'"
+  },
+  "dependencies": {
+    "@fontsource/ibm-plex-mono": "5.2.7",
+    "@fontsource/ibm-plex-sans": "5.2.8",
+    "@nexconn/chat": "26.5.1",
+    "@nexconn/engine": "26.5.1",
+    "@pinthread/shared": "workspace:*",
+    "@tanstack/react-query": "5.90.5",
+    "qrcode.react": "4.2.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-zoom-pan-pinch": "3.7.0",
+    "wouter": "3.7.1"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.2",
+    "@vitejs/plugin-react": "5.1.0",
+    "typescript": "5.9.3",
+    "vite": "7.1.12"
+  }
+}

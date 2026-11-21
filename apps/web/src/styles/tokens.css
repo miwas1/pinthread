@@ -1,0 +1,84 @@
+/* PinThread design tokens — source of truth for the Tailwind theme (see docs/UI_DESIGN.md §3). */
+
+:root {
+  /* Type */
+  --font-sans: "IBM Plex Sans", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --text-xs: 11px;   --lh-xs: 14px;   /* micro labels, role tags */
+  --text-sm: 12px;   --lh-sm: 16px;   /* meta, timestamps */
+  --text-md: 14px;   --lh-md: 20px;   /* desktop body */
+  --text-lg: 15px;   --lh-lg: 22px;   /* mobile body */
+  --text-xl: 17px;   --lh-xl: 24px;   /* card titles */
+  --text-2xl: 20px;  --lh-2xl: 28px;  /* panel titles */
+  --text-3xl: 28px;  --lh-3xl: 34px;
+  --text-4xl: 52px;  --lh-4xl: 56px;  /* landing display */
+
+  /* Neutrals: cool graphite, tuned to sit next to white drawing paper */
+  --n-0: #FFFFFF;
+  --n-25: #FAFBFC;
+  --n-50: #F4F5F7;   /* app background */
+  --n-100: #ECEEF2;
+  --n-150: #E3E6EB;  /* canvas "desk" around the sheet */
+  --n-200: #D9DDE4;  /* borders */
+  --n-300: #C3C9D2;
+  --n-400: #9AA2AE;
+  --n-500: #5F6673;  /* tertiary text: ≥ 4.5:1 on --n-50 */
+  --n-600: #4B5563;  /* secondary text */
+  --n-700: #374151;
+  --n-800: #1F2937;
+  --n-900: #111827;  /* primary text, ink buttons */
+
+  /* Status: the only saturated colours in the product (plus redline + focus) */
+  --open: #2563EB;     --open-weak: #EEF3FF;     --open-text: #1D4ED8;
+  --review: #D97706;   --review-weak: #FFF6E5;   --review-text: #92400E;
+  --blocked: #DC2626;  --blocked-weak: #FEF1F1;  --blocked-text: #B42318;
+  --complete: #16A34A; --complete-weak: #EBFBF1; --complete-text: #166534; --complete-strong: #15803D; /* button fill: white text 5.0:1 */
+
+  /* Markup + drawing layers (layers deliberately desaturated) */
+  --redline: #D61F69;  --redline-weak: #FDECF3;
+  --layer-arch: #4B5563;
+  --layer-struct: #5F7FA8;
+  --layer-mep: #3E9488;
+
+  /* Discipline identity (avatars, role tags) — muted so they never read as status */
+  --disc-site: #7C5E3C;   --disc-site-weak: #F5EFE7;
+  --disc-mep: #2F7D74;    --disc-mep-weak: #E6F3F1;
+  --disc-struct: #4F6E96; --disc-struct-weak: #E9EFF7;
+  --disc-arch: #5B5F97;   --disc-arch-weak: #EDEEF7;
+
+  /* Semantic aliases */
+  --bg: var(--n-50);
+  --surface: var(--n-0);
+  --surface-sunken: var(--n-25);
+  --canvas: var(--n-150);
+  --border: var(--n-200);
+  --border-strong: var(--n-300);
+  --text: var(--n-900);
+  --text-2: var(--n-600);
+  --text-3: var(--n-500);
+  --focus: #2563EB;
+
+  /* Shape */
+  --r-xs: 4px; --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-xl: 20px; --r-pill: 999px;
+
+  /* Elevation */
+  --e-1: 0 1px 2px rgba(17, 24, 39, .06), 0 1px 1px rgba(17, 24, 39, .04);
+  --e-2: 0 4px 12px rgba(17, 24, 39, .08), 0 1px 3px rgba(17, 24, 39, .06);
+  --e-3: 0 12px 32px rgba(17, 24, 39, .14), 0 2px 6px rgba(17, 24, 39, .08);
+  --e-sheet: 0 -8px 30px rgba(17, 24, 39, .16);
+
+  /* Space (4-pt) */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 20px; --s-6: 24px; --s-8: 32px; --s-10: 40px; --s-12: 48px;
+
+  /* Layout */
+  --topbar-h: 56px; --rail-w: 320px; --panel-w: 420px;
+
+  /* Motion */
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+  --d-fast: 120ms; --d-base: 200ms; --d-slow: 320ms; --d-camera: 450ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --d-fast: 0ms; --d-base: 0ms; --d-slow: 0ms; --d-camera: 0ms; }
+}
